@@ -1,11 +1,11 @@
 # Stage 1: Build the Vite application
-FROM node:18-alpine AS builder
+FROM node:20-slim AS builder
 
 WORKDIR /app
 
 # Install dependencies first for better caching
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm ci || npm install
 
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY

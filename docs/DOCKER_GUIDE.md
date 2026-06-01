@@ -127,4 +127,49 @@ A: **WARNING:** This will delete your local database data!
 ```bash
 sudo docker-compose down -v
 ```
-The `-v` flag deletes the volumes (where the database saves its data permanently).
+---
+
+## 4. Pushing Your App to Docker Hub (For Remote Servers)
+
+If you don't want to copy your entire source code to your server, you can build the "images" on your laptop and push them to Docker Hub (like GitHub, but for Docker).
+
+**Step 1: Create a Docker Hub account**
+Go to [hub.docker.com](https://hub.docker.com/) and create a free account. Note your `username`.
+
+**Step 2: Login to Docker on your laptop**
+Open your terminal and run:
+```bash
+docker login
+```
+*(Enter your username and password).*
+
+**Step 3: Build and Tag your images**
+You need to prefix your image names with your Docker Hub username. Run these commands from your project root:
+```bash
+# Build Frontend
+docker build -t yourusername/pm-tool-frontend ./frontend
+
+# Build Calendar Backend
+docker build -t yourusername/pm-tool-calendar ./backend/calender
+
+# Build Product Key Backend
+docker build -t yourusername/pm-tool-product-key ./backend/product-key
+```
+
+**Step 4: Push the images to Docker Hub**
+```bash
+docker push yourusername/pm-tool-frontend
+docker push yourusername/pm-tool-calendar
+docker push yourusername/pm-tool-product-key
+```
+
+**Step 5: Run it on your server!**
+On your remote server, you don't need the source code. You just need a `.env` file and a modified `docker-compose.yml` that uses `image:` instead of `build:`. 
+For example, in your server's `docker-compose.yml`:
+```yaml
+  frontend:
+    image: yourusername/pm-tool-frontend:latest
+    ports:
+      - "3000:80"
+```
+Then just run `docker-compose up -d` on the server, and it will download your pre-built app!
