@@ -107,7 +107,7 @@ export function TaskDiscussionTab({ taskId, users, currentUserProfile, notify }:
               <div className="flex-1">
                 <div className="flex justify-between items-start mb-1">
                   <span className="text-[10px] font-mono text-text-secondary">
-                    {c.author?.full_name || c.author?.email || 'Unknown User'}
+                    {c.author?.full_name || c.author?.email || 'Former Member'}
                   </span>
                   <div className="flex items-center gap-2">
                     <span className="text-[9px] font-mono text-text-quaternary">

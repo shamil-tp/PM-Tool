@@ -36,7 +36,7 @@ export function WidgetCard({ title, children, loading, error, empty, emptyMessag
           <div className="text-xs text-red-400 font-bold bg-red-500/10 border border-red-500/20 p-3 rounded-xl">{error}</div>
         ) : empty ? (
           <div className="text-center py-8">
-            <p className="text-xs font-bold text-text-quaternary mb-4">{emptyMessage || 'No data available'}</p>
+            <p className="text-xs font-semibold text-text-quaternary mb-4">{emptyMessage || 'We need more data to show these insights.'}</p>
             {emptyAction && (
               <button
                 onClick={emptyAction.onClick}

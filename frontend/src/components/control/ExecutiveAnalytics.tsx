@@ -452,7 +452,7 @@ export function ExecutiveAnalytics() {
                 <span className="font-bold text-text-primary">
                   {visibleTeamProfiles.length > 0 ? visibleTeamProfiles[0].recoveryEfficiencyScore : 80}%
                 </span>
-                . Check active checklists under Mission Control to minimize local release delay spikes.
+                . Check active checklists under Admin Panel to minimize local release delay spikes.
               </p>
             </div>
             <div className="p-4 bg-surface border border-border-subtle rounded-xl flex flex-col justify-between">

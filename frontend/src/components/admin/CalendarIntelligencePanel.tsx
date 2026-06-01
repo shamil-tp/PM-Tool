@@ -233,7 +233,7 @@ export function CalendarIntelligencePanel() {
                 <div className="w-8 h-8 rounded-lg bg-accent-primary/10 flex items-center justify-center">
                   <RefreshCw className={`w-4 h-4 text-accent-primary ${syncing ? 'animate-spin' : ''}`} />
                 </div>
-                <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider">Synchronization Engine</h3>
+                <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider">Calendar Sync</h3>
               </div>
               <button 
                 onClick={handleSyncNow} 

@@ -53,7 +53,7 @@ export function TaskActivityTab({ taskId }: TaskActivityTabProps) {
                 {log.action.replace(/_/g, ' ')}
               </span>
               <span className="text-[9px] font-mono text-text-quaternary">
-                {log.created_at ? new Date(log.created_at).toLocaleString() : 'Unknown Time'}
+                {log.created_at ? new Date(log.created_at).toLocaleString() : 'Not Recorded'}
               </span>
             </div>
             {Object.keys(log.metadata || {}).length > 0 && (

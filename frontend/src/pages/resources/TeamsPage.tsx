@@ -1,5 +1,6 @@
 import React from 'react';
 import { TeamRosterView } from '../../components/resources/TeamRosterView';
+import { SkillsMatrixView } from '../../components/resources/SkillsMatrixView';
 
 export default function TeamsPage() {
   return (
@@ -26,6 +27,13 @@ export default function TeamsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-12 glass-panel rounded-xl border border-border overflow-hidden bg-surface-2">
           <TeamRosterView />
+        </div>
+      </div>
+
+      {/* Skills Matrix Section */}
+      <div className="grid grid-cols-1 gap-6 mt-8">
+        <div className="glass-panel rounded-xl border border-border overflow-hidden bg-surface-2">
+          <SkillsMatrixView />
         </div>
       </div>
     </div>

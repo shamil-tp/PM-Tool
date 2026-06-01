@@ -14,11 +14,15 @@ interface AssigneePickerProps {
   value: string;
   onChange: (userId: string) => void;
   disabled?: boolean;
+  contextText?: string;
 }
 
-export function AssigneePicker({ users, value, onChange, disabled }: AssigneePickerProps) {
+import { useOperationalData } from '../../context/OperationalDataContext';
+
+export function AssigneePicker({ users, value, onChange, disabled, contextText = '' }: AssigneePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { raw: { skills = [], userSkills = [] } } = useOperationalData();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -30,7 +34,35 @@ export function AssigneePicker({ users, value, onChange, disabled }: AssigneePic
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const selectedUser = users.find(u => u.id === value);
+  const selectedUser = (() => {
+    return users.find(u => u.id === value);
+  })();
+
+  // Skill matching
+  const relevantSkills = skills.filter(s => 
+    contextText.toLowerCase().includes(s.name.toLowerCase())
+  );
+  
+  const userSkillMatchMap = new Map<string, string[]>(); // userId -> matching skill names
+  
+  if (relevantSkills.length > 0) {
+    users.forEach(user => {
+      const userSkillRows = userSkills.filter(us => us.user_id === user.id);
+      const matches = userSkillRows
+        .filter(us => relevantSkills.some(rs => rs.id === us.skill_id))
+        .map(us => skills.find(s => s.id === us.skill_id)?.name || '');
+      if (matches.length > 0) {
+        userSkillMatchMap.set(user.id, matches);
+      }
+    });
+  }
+
+  // Sort users so that matched users appear first
+  const sortedUsers = [...users].sort((a, b) => {
+    const aMatch = userSkillMatchMap.has(a.id) ? 1 : 0;
+    const bMatch = userSkillMatchMap.has(b.id) ? 1 : 0;
+    return bMatch - aMatch;
+  });
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -82,8 +114,9 @@ export function AssigneePicker({ users, value, onChange, disabled }: AssigneePic
             {!value && <Check className="w-4 h-4 text-accent-primary" />}
           </button>
 
-          {users.map(user => {
+          {sortedUsers.map(user => {
             const isSelected = value === user.id;
+            const matches = userSkillMatchMap.get(user.id);
             return (
               <button
                 key={user.id}
@@ -103,8 +136,14 @@ export function AssigneePicker({ users, value, onChange, disabled }: AssigneePic
                     <span className={`truncate ${isSelected ? 'text-accent-primary font-semibold' : 'text-text-primary'}`}>
                       {user.full_name || user.email.split('@')[0]}
                     </span>
-                    {user.full_name && (
-                      <span className="text-[10px] text-text-quaternary truncate">{user.email}</span>
+                    {matches && matches.length > 0 ? (
+                      <span className="text-[10px] text-emerald-400 truncate bg-emerald-400/10 px-1 rounded">
+                        Skilled in: {matches.join(', ')}
+                      </span>
+                    ) : (
+                      user.full_name && (
+                        <span className="text-[10px] text-text-quaternary truncate">{user.email}</span>
+                      )
                     )}
                   </div>
                 </div>

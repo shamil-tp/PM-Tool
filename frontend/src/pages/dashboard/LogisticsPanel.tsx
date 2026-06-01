@@ -25,9 +25,9 @@ export function LogisticsPanel() {
         </div>
         <div className="text-center max-w-sm">
           <p className="text-[11px] font-bold uppercase tracking-widest text-signal-error mb-2">
-            CLEARANCE DENIED
+            Access Denied
           </p>
-          <p className="text-sm font-medium text-text-tertiary">Logistics management privileges are strictly required to access this orchestration module.</p>
+          <p className="text-sm font-medium text-text-tertiary">Team management privileges are strictly required to access this section.</p>
         </div>
       </div>
     );
@@ -42,7 +42,7 @@ export function LogisticsPanel() {
             <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20">
               <Icon name="local_shipping" size={20} style={{ color: 'rgb(129, 140, 248)' }} />
             </div>
-            <h1 className="text-3xl font-semibold tracking-tight text-text-primary">Operational Logistics</h1>
+            <h1 className="text-3xl font-semibold tracking-tight text-text-primary">Team Management</h1>
           </div>
           <p className="text-sm font-medium text-text-tertiary">
             Resource management, attendance tracking, and capacity planning.
@@ -67,6 +67,7 @@ export function LogisticsPanel() {
           systemData={systemData}
           onSaveData={handleSaveLogisticsData}
           role={profile?.role}
+          defaultTab={window.location.pathname.includes('attendance') ? 'attendance' : window.location.pathname.includes('payroll') ? 'payroll' : 'members'}
         />
       </div>
     </div>

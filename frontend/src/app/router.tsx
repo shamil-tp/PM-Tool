@@ -64,9 +64,11 @@ const SprintPage = withRetry(() => import('../pages/execution/SprintPage'));
 const TeamsPage = withRetry(() => import('../pages/resources/TeamsPage'));
 const CapacityPage = withRetry(() => import('../pages/resources/CapacityPage'));
 const WorkLogsPage = withRetry(() => import('../pages/resources/WorkLogsPage'));
+const FinancePage = withRetry(() => import('../pages/resources/FinancePage'));
 
 const AnalyticsPage = withRetry(() => import('../pages/control/AnalyticsPage'));
 const AuditPage = withRetry(() => import('../pages/control/AuditPage'));
+const DocumentTemplatesPage = withRetry(() => import('../pages/control/DocumentTemplatesPage'));
 const ObservabilityPanel = withRetry(() => import('../pages/dashboard/ObservabilityPanel').then(m => ({ default: m.ObservabilityPanel })));
 const SettingsPage = withRetry(() => import('../pages/control/SettingsPage'));
 
@@ -328,7 +330,7 @@ export function ResolveRouter() {
 
   // ── RESOURCES ──
 
-  if (pathname === '/resources') {
+  if (pathname === '/resources' || pathname === '/resources/attendance' || pathname === '/resources/payroll') {
     if (!guardRoute(role, '/resources')) return <Redirect to={DEFAULT_AUTH_REDIRECT} />;
     return <RouteShell><LogisticsPanel /></RouteShell>;
   }
@@ -344,6 +346,10 @@ export function ResolveRouter() {
     if (!guardRoute(role, '/resources/work-logs')) return <Redirect to={DEFAULT_AUTH_REDIRECT} />;
     return <RouteShell><WorkLogsPage /></RouteShell>;
   }
+  if (pathname === '/resources/finance') {
+    if (!guardRoute(role, '/resources/finance')) return <Redirect to={DEFAULT_AUTH_REDIRECT} />;
+    return <RouteShell><FinancePage /></RouteShell>;
+  }
 
   // ── CONTROL ──
 
@@ -358,6 +364,10 @@ export function ResolveRouter() {
   if (pathname === '/control/audit') {
     if (!guardRoute(role, '/control/audit')) return <Redirect to={DEFAULT_AUTH_REDIRECT} />;
     return <RouteShell><AuditPage /></RouteShell>;
+  }
+  if (pathname === '/control/document-templates') {
+    if (!guardRoute(role, '/control/document-templates')) return <Redirect to={DEFAULT_AUTH_REDIRECT} />;
+    return <RouteShell><DocumentTemplatesPage /></RouteShell>;
   }
   if (pathname === '/control/system-health') {
     if (!guardRoute(role, '/control')) return <Redirect to={DEFAULT_AUTH_REDIRECT} />;

@@ -11,6 +11,8 @@ export function CommandPalette() {
   const projects = operationalData?.raw?.projects || [];
   const tasks = operationalData?.raw?.tasks || [];
   const profiles = operationalData?.raw?.profiles || [];
+  const skills = operationalData?.raw?.skills || [];
+  const userSkills = operationalData?.raw?.userSkills || [];
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -42,6 +44,17 @@ export function CommandPalette() {
 
   const filteredProjects = projects.filter(p => p.name.toLowerCase().includes(query.toLowerCase())).slice(0, 3);
   const filteredTasks = tasks.filter(t => t.name.toLowerCase().includes(query.toLowerCase())).slice(0, 3);
+  
+  // Skill Search
+  const matchingSkills = skills.filter(s => s.name.toLowerCase().includes(query.toLowerCase()));
+  let skilledProfiles: any[] = [];
+  if (matchingSkills.length > 0 && query.trim().length > 0) {
+    const matchedUserIds = userSkills
+      .filter(us => matchingSkills.some(s => s.id === us.skill_id))
+      .map(us => us.user_id);
+    const uniqueUserIds = Array.from(new Set(matchedUserIds));
+    skilledProfiles = profiles.filter(p => uniqueUserIds.includes(p.id)).slice(0, 5);
+  }
 
   return (
     <div className="fixed inset-0 z-[100] bg-[var(--pm-surface)] dark:bg-black/60 backdrop-blur-sm flex items-start justify-center pt-[15vh]">
@@ -117,7 +130,20 @@ export function CommandPalette() {
                   ))}
                 </div>
               )}
-              {filteredProjects.length === 0 && filteredTasks.length === 0 && (
+              {skilledProfiles.length > 0 && (
+                <div className="p-2">
+                  <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest px-2 mb-2">People by Skill</div>
+                  {skilledProfiles.map(p => (
+                    <button key={p.id} className="w-full flex items-center justify-between p-2 hover:bg-[var(--pm-panel)] rounded-lg text-left group transition-all">
+                      <div className="flex items-center gap-3">
+                        <User className="w-4 h-4 text-cyan-400" />
+                        <span className="text-sm text-text-secondary group-hover:text-text-primary">{p.full_name || p.email}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {filteredProjects.length === 0 && filteredTasks.length === 0 && skilledProfiles.length === 0 && (
                 <div className="p-8 text-center text-text-tertiary text-sm font-mono">
                   No results found for "{query}"
                 </div>

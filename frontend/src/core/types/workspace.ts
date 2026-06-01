@@ -33,6 +33,8 @@ export interface Member {
   avatar_url?: string;
   role: UserRole;
   designation?: string;
+  date_of_joining?: string;
+  employment_status?: 'active' | 'resigned' | 'terminated';
   availability_factor: number;
   created_at: string;
 }

@@ -38,7 +38,7 @@ export function WorkLogsPanel() {
   return (
     <div className="max-w-[1600px] mx-auto px-3 sm:px-6 py-6 sm:py-12 space-y-8 font-geist" style={{ color: 'var(--pm-on-surface)' }}>
       <div>
-        <h2 className="text-2xl font-semibold tracking-tight mb-1" style={{ color: 'var(--pm-on-surface)' }}>Resource Orchestration</h2>
+        <h2 className="text-2xl font-semibold tracking-tight mb-1" style={{ color: 'var(--pm-on-surface)' }}>Resource Management</h2>
         <p className="text-sm tracking-tight" style={{ color: 'var(--pm-on-surface-variant)' }}>Time tracking, attendance, and productivity analytics</p>
       </div>
 

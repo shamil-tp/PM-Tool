@@ -14,6 +14,8 @@ export interface CreateTaskInput {
   assignee_id?: string;
   synthetic?: boolean;
   runId?: string;
+  recurrence_type?: string;
+  recurrence_rule?: any;
 }
 
 export async function createTask(input: CreateTaskInput): Promise<{ id: string } | null> {
@@ -36,6 +38,37 @@ export async function createTask(input: CreateTaskInput): Promise<{ id: string }
       .maybeSingle();
     if (error) { logServiceFailure('createTask', input, error); return null; }
     if (data) {
+      // If recurring, setup the template
+      if (input.recurrence_type && input.recurrence_type !== 'none') {
+        const nextRun = new Date();
+        if (input.recurrence_type === 'daily') nextRun.setDate(nextRun.getDate() + 1);
+        else if (input.recurrence_type === 'weekly') nextRun.setDate(nextRun.getDate() + 7);
+        else if (input.recurrence_type === 'monthly') nextRun.setMonth(nextRun.getMonth() + 1);
+        else if (input.recurrence_type === 'yearly') nextRun.setFullYear(nextRun.getFullYear() + 1);
+        else nextRun.setDate(nextRun.getDate() + 7); // custom default
+
+        const { data: userData } = await supabase.auth.getUser();
+        
+        const { data: template } = await supabase.from('recurring_task_templates').insert({
+          workspace_id: input.workspace_id,
+          project_id: input.project_id,
+          title: input.name,
+          description: null,
+          created_by: userData.user?.id,
+          assigned_to: input.assignee_id || null,
+          recurrence_type: input.recurrence_type,
+          recurrence_rule: input.recurrence_rule || null,
+          next_run_at: nextRun.toISOString()
+        }).select('id').maybeSingle();
+
+        if (template) {
+          await supabase.from('recurring_task_history').insert({
+            template_id: template.id,
+            generated_task_id: data.id
+          });
+        }
+      }
+
       await activityLogService.appendLog({
         workspace_id: input.workspace_id,
         action: 'task_created',

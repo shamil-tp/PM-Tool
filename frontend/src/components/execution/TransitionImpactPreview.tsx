@@ -45,7 +45,7 @@ export function TransitionImpactPreview({ currentMode, targetMode, hasTasks, has
         : 'Velocity tracking disabled — throughput metrics used',
     },
     {
-      label: 'coordination telemetry',
+      label: 'coordination data',
       willChange: true,
       description: 'Coordination signals recalibrated for new execution mode',
     },

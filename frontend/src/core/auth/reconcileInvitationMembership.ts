@@ -34,6 +34,7 @@ export interface InvitationRecord {
   role: UserRole;
   status: string;
   expires_at: string;
+  date_of_joining?: string;
 }
 
 function designationForRole(role: UserRole): string {
@@ -59,7 +60,7 @@ export async function findValidInvitation(email: string): Promise<InvitationReco
   const normalized = email.trim().toLowerCase();
   const { data, error } = await supabase
     .from('invitations')
-    .select('id, email, workspace_id, role, status, expires_at')
+    .select('id, email, workspace_id, role, status, expires_at, date_of_joining')
     .ilike('email', normalized)
     .in('status', ['pending', 'accepted'])
     .order('created_at', { ascending: false });
@@ -110,6 +111,21 @@ async function upsertMemberFromInvitation(
 
   if (invite.status === 'pending') {
     await markInvitationAccepted(invite.id);
+  }
+
+  if (invite.date_of_joining) {
+    const { error: empError } = await supabase
+      .from('employment_records')
+      .insert({
+        profile_id: input.authUserId,
+        workspace_id: invite.workspace_id,
+        date_of_joining: invite.date_of_joining,
+        employment_status: 'active',
+      });
+      
+    if (empError) {
+      console.warn('[reconcileInvitationMembership] employment record upsert failed:', empError);
+    }
   }
 
   return data as Record<string, unknown>;

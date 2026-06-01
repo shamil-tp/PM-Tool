@@ -19,7 +19,7 @@ export interface ComputeDerivedInput {
   teams: Team[];
   profiles: unknown[];
   attendanceRows: AttendanceRow[];
-  salaryRows: SalaryRow[];
+  
   workspaceSettingsBlob: Record<string, unknown>;
   userId: string;
   userRole: UserRole;
@@ -302,7 +302,7 @@ export function computeOperationalDerived(input: ComputeDerivedInput): Operation
   const systemData = buildLogisticsSystemData({
     teams: input.teams,
     attendanceRows: input.attendanceRows,
-    salaryRows: input.salaryRows,
+    
     workspaceSettingsBlob: input.workspaceSettingsBlob,
   });
 

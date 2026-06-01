@@ -80,41 +80,7 @@ async function persistAttendanceChanges(
   return true;
 }
 
-async function persistSalaryChanges(
-  workspaceId: string,
-  previous: Record<string, number>,
-  next: Record<string, number>,
-): Promise<boolean> {
-  const promises: Promise<unknown>[] = [];
 
-  Object.keys(next).forEach(userId => {
-    const salary = next[userId];
-    if (previous[userId] !== salary) {
-      promises.push(
-        (async () => {
-          const { data: existing } = await supabase
-            .from('salaries')
-            .select('id')
-            .eq('user_id', userId)
-            .maybeSingle();
-
-          if (existing) {
-            return supabase.from('salaries').update({ base_salary: salary }).eq('id', existing.id);
-          }
-          return supabase.from('salaries').insert({
-            workspace_id: workspaceId,
-            user_id: userId,
-            base_salary: salary,
-          });
-        })(),
-      );
-    }
-  });
-
-  if (promises.length === 0) return false;
-  await Promise.all(promises);
-  return true;
-}
 
 function flattenAttendance(
   workspaceId: string,
@@ -141,7 +107,6 @@ function flattenAttendance(
 export async function saveLogisticsData(input: SaveLogisticsInput): Promise<SaveLogisticsResult> {
   const payload = { ...input.updatedData };
   let attendanceRows: AttendanceRow[] | undefined;
-  let salaryRows: SalaryRow[] | undefined;
   let persisted = false;
 
   if (payload.attendance && isSupabaseConfigured) {
@@ -159,23 +124,6 @@ export async function saveLogisticsData(input: SaveLogisticsInput): Promise<Save
 
     attendanceRows = flattenAttendance(input.workspaceId, next);
     delete payload.attendance;
-  }
-
-  if (payload.salaries && isSupabaseConfigured) {
-    const next = payload.salaries as Record<string, number>;
-    const previous = (input.previousSystemData.salaries || {}) as Record<string, number>;
-
-    try {
-      persisted = (await persistSalaryChanges(input.workspaceId, previous, next)) || persisted;
-    } catch (err) {
-      console.error('[logisticsService] salaries persist failed:', err);
-    }
-
-    salaryRows = Object.keys(next).map(userId => ({
-      user_id: userId,
-      base_salary: Number(next[userId]) || 3000,
-    }));
-    delete payload.salaries;
   }
 
   localStorage.setItem('SYSTEM_SETTINGS', JSON.stringify(payload));
@@ -228,7 +176,6 @@ export async function saveLogisticsData(input: SaveLogisticsInput): Promise<Save
   return {
     settingsPatch: payload,
     attendanceRows,
-    salaryRows,
     teamsPatch,
     persisted,
   };

@@ -28,11 +28,39 @@ export async function fetchWorkspaceProfiles(workspaceId: string): Promise<Profi
     .eq('workspace_id', workspaceId)
     .order('created_at', { ascending: true });
 
-  if (!error && data) return data as Profile[];
+  let users = (!error && data) ? (data as Profile[]) : [];
+  
+  if (users.length === 0) {
+    const { data: fallback, error: fallbackErr } = await supabase.from('profiles').select('*');
+    if (!fallbackErr && fallback) {
+      users = fallback as Profile[];
+    }
+  }
 
-  const { data: fallback, error: fallbackErr } = await supabase.from('profiles').select('*');
-  if (!fallbackErr && fallback) return fallback as Profile[];
-  return [];
+  if (users.length > 0) {
+    const { data: empData, error: empError } = await supabase
+      .from('employment_records')
+      .select('profile_id, date_of_joining, employment_status')
+      .eq('workspace_id', workspaceId);
+
+    if (!empError && empData) {
+      const empMap = new Map();
+      empData.forEach((record: any) => empMap.set(record.profile_id, record));
+      users = users.map(u => {
+        const emp = empMap.get(u.id);
+        if (emp) {
+          return {
+            ...u,
+            date_of_joining: emp.date_of_joining,
+            employment_status: emp.employment_status,
+          };
+        }
+        return u;
+      });
+    }
+  }
+
+  return users;
 }
 
 export async function fetchWorkspaceAttendance(workspaceId: string): Promise<AttendanceRow[]> {
@@ -158,4 +186,64 @@ export async function fetchWorkspaceSettingsBlob(workspaceId: string): Promise<R
     .eq('workspace_id', workspaceId)
     .maybeSingle();
   return (data?.settings_blob as Record<string, unknown>) || {};
+}
+
+export async function fetchSkills(workspaceId: string) {
+  const { data } = await supabase.from('skills').select('*').eq('workspace_id', workspaceId);
+  return data || [];
+}
+
+export async function fetchUserSkills(workspaceId: string) {
+  const { data: users } = await supabase.from('users').select('id').eq('workspace_id', workspaceId);
+  if (!users) return [];
+  const userIds = users.map(u => u.id);
+  
+  if (userIds.length === 0) return [];
+  
+  const { data: userSkills } = await supabase.from('user_skills').select('*').in('user_id', userIds);
+  return userSkills || [];
+}
+export async function createSkill(workspaceId: string, name: string, category: string = 'General') {
+  const { data, error } = await supabase.from('skills').insert({
+    workspace_id: workspaceId,
+    name,
+    category
+  }).select().single();
+  
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteSkill(skillId: string) {
+  const { error } = await supabase.from('skills').delete().eq('id', skillId);
+  if (error) throw error;
+  return true;
+}
+
+export async function upsertUserSkill(userId: string, skillId: string, level: string, verifierId?: string) {
+  const { data: existing, error: findError } = await supabase.from('user_skills')
+    .select('id').eq('user_id', userId).eq('skill_id', skillId).maybeSingle();
+    
+  if (existing) {
+    const { error } = await supabase.from('user_skills')
+      .update({ level, verified_by: verifierId, updated_at: new Date().toISOString() })
+      .eq('id', existing.id);
+    if (error) throw error;
+    return true;
+  } else {
+    const { error } = await supabase.from('user_skills').insert({
+      user_id: userId,
+      skill_id: skillId,
+      level,
+      verified_by: verifierId
+    });
+    if (error) throw error;
+    return true;
+  }
+}
+
+export async function removeUserSkill(userId: string, skillId: string) {
+  const { error } = await supabase.from('user_skills').delete().eq('user_id', userId).eq('skill_id', skillId);
+  if (error) throw error;
+  return true;
 }

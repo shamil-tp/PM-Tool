@@ -8,6 +8,7 @@ import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { calculateExpectedTime, calculateVariance } from '../../utils/timeUtils';
 import { addWorkingHours, getDailyCapacity } from '../../utils/productivity';
 import { activityLogService } from '../../services/activityLogService';
+import { FilePanel } from '../common/FilePanel';
 
 export function ProjectDetailsModal({
   project,
@@ -35,7 +36,7 @@ export function ProjectDetailsModal({
   const { tasks, updateWorkspaceSettings, projectFrictionMetrics = {}, timelineShiftLedger = [], notify, workspaceSettingsBlob = {} } = useDashboard();
   const hasTasks = tasks.some(t => t.project_id === project.id);
 
-  const [activeTab, setActiveTab] = useState<'general' | 'friction'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'friction' | 'files'>('general');
   const [deltaDays, setDeltaDays] = useState('5');
   const [blockerCategory, setBlockerCategory] = useState('Client IT Team');
   const [blockerOwnership, setBlockerOwnership] = useState('Client');
@@ -694,6 +695,15 @@ export function ProjectDetailsModal({
             >
               Delivery Friction & Shifts
             </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('files')}
+              className={`px-4 py-2 text-xs font-mono uppercase tracking-wider border-b-2 transition-all ${
+                activeTab === 'files' ? 'border-text-primary text-text-primary' : 'border-transparent text-text-tertiary hover:text-text-secondary'
+              }`}
+            >
+              Files
+            </button>
           </div>
 
           {activeTab === 'general' ? (
@@ -888,12 +898,12 @@ export function ProjectDetailsModal({
                 </button>
               </div>
             </form>
-          ) : (
+          ) : activeTab === 'friction' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
               {/* Left Column: Delivery Friction Summary */}
               <div className="space-y-6">
                 <div>
-                  <h4 className="text-[10px] font-sans text-text-secondary uppercase tracking-wide mb-3">Execution State Orchestration</h4>
+                  <h4 className="text-[10px] font-sans text-text-secondary uppercase tracking-wide mb-3">Execution State Management</h4>
                   <p className="text-[11px] text-text-tertiary leading-relaxed mb-4">
                     Transition the current delivery state to model passive latency and contractually relevant wait-state friction.
                   </p>
@@ -1151,7 +1161,16 @@ export function ProjectDetailsModal({
                 </div>
               </div>
             </div>
-          )}
+          ) : activeTab === 'files' ? (
+            <div className="mt-4">
+              <FilePanel 
+                entityType="project"
+                entityId={project.id}
+                currentUserId={currentUserProfile?.id || ''}
+                canEdit={true}
+              />
+            </div>
+          ) : null}
         </div>
       </motion.div>
     </div>

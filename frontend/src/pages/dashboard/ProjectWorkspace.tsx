@@ -53,14 +53,14 @@ export function ProjectWorkspace() {
   return (
     <div className="max-w-[1600px] mx-auto pb-12 animate-in fade-in duration-300">
       
-      {/* 1. PORTFOLIO HEADER */}
+      {/* 1. PROJECTS HEADER */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-8 border-b border-border-subtle pb-6 mt-2">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <Layers className="w-5 h-5 text-accent-secondary" />
-            <h1 className="text-2xl font-sans tracking-tight font-medium text-text-primary">Portfolio Orchestration</h1>
+            <h1 className="text-2xl font-sans tracking-tight font-medium text-text-primary">Projects</h1>
           </div>
           <p className="text-sm text-text-tertiary">
+            Managing projects, progress, teams, timelines, and risks.
             Executive oversight of {workspace?.settings?.companyName || workspace?.name || 'Workspace'}'s execution cycles and delivery timelines.
           </p>
         </div>
@@ -96,7 +96,7 @@ export function ProjectWorkspace() {
         </div>
       </div>
 
-      {/* 2. PORTFOLIO CONTROLS (Search & Filters) */}
+      {/* 2. PROJECTS CONTROLS (Search & Filters) */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
         <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0 hide-scrollbar">
           <button 
@@ -127,10 +127,10 @@ export function ProjectWorkspace() {
 
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-quaternary" />
             <input
               type="text"
-              placeholder="Search portfolio..."
+              placeholder="Search projects..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full bg-surface-2 border border-border rounded-md h-9 pl-9 pr-4 text-xs focus:border-border-subtle focus:ring-1 focus:ring-border-subtle outline-none transition-all placeholder:text-text-tertiary"
@@ -170,9 +170,9 @@ export function ProjectWorkspace() {
           <div className="col-span-full">
             <EmptyState 
               icon={Briefcase}
-              title="No initiatives initialized yet"
-              description="Launch your first delivery vehicle to activate execution metrics or use our guided templates."
-              actionLabel="Initialize Project"
+              title="No projects created yet"
+              description="Create your first project to start tracking work and managing your team."
+              actionLabel="Create Project"
               onAction={() => window.location.href='/projects/new'}
             />
           </div>

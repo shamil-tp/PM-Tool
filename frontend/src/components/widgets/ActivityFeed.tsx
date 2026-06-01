@@ -49,14 +49,18 @@ function actionLabel(action: string, count: number): string {
     integration_synced: 'synced integration',
     approval_submitted: 'submitted approval',
     approval_resolved: 'resolved approval',
+    file_uploaded: 'uploaded file',
+    file_replaced: 'replaced file',
+    version_restored: 'restored file version',
+    file_archived: 'archived file',
   };
   const base = labels[action] || action.replace(/_/g, ' ');
   return count > 1 ? `${base} ${count}x` : base;
 }
 
 function severityClass(action: string): string {
-  const h = ['task_completed', 'approval_resolved', 'integration_synced'];
-  const m = ['task_created', 'project_created', 'sprint_started', 'automation_executed'];
+  const h = ['task_completed', 'approval_resolved', 'integration_synced', 'version_restored'];
+  const m = ['task_created', 'project_created', 'sprint_started', 'automation_executed', 'file_uploaded', 'file_replaced'];
   if (h.includes(action)) return 'border-l-emerald-500/30';
   if (m.includes(action)) return 'border-l-amber-500/20';
   return 'border-l-white/5';

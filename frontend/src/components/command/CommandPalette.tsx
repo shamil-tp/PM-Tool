@@ -7,6 +7,7 @@ import { isRouteDisclosed, type DisclosureLevel } from '../../core/dashboard/pro
 import { activityLogService } from '../../services/activityLogService';
 import { recordUsage, getSessionId } from '../../services/commandUsageService';
 import { CANONICAL_ROUTES, renderRouteIcon } from '../../app/routeRegistry';
+import { searchService } from '../../services/searchService';
 
 interface CmdResult {
   id: string;
@@ -34,10 +35,10 @@ interface Props {
   disclosureActive?: boolean;
 }
 
-const STORAGE_KEY = 'resolve-command-recent';
+const STORAGE_KEY = 'resolve-command-recent-v2';
 const USAGE_KEY = 'resolve-command-usage-v2';
 const TIMELINE_KEY = 'resolve-command-timeline-v2';
-const MAX_RECENT = 10;
+const MAX_RECENT = 15;
 const MAX_TIMELINE = 2000;
 
 // --- Alias Engine ---
@@ -246,8 +247,18 @@ function getRecent(): CmdResult[] {
 }
 
 function addRecent(result: CmdResult) {
+  const toStore = {
+    id: result.id,
+    group: result.group,
+    label: result.label,
+    description: result.description,
+    metadata: {
+      ...(result.metadata || {}),
+      opened_at: new Date().toISOString()
+    }
+  };
   const recent = getRecent().filter(r => r.id !== result.id);
-  recent.unshift(result);
+  recent.unshift(toStore as any);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(recent.slice(0, MAX_RECENT)));
 }
 
@@ -319,6 +330,67 @@ export default function CommandPalette(props: Props) {
       setTimeout(() => inputRef.current?.focus(), 50);
     }
   }, [isOpen]);
+
+  const [dbResults, setDbResults] = useState<CmdResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const { groupFilter, cleanQuery } = parseSlashFilter(debouncedQuery.trim());
+    if (!cleanQuery || groupFilter) {
+      setDbResults([]);
+      setIsSearching(false);
+      return;
+    }
+    
+    setIsSearching(true);
+    searchService.searchWorkspace(cleanQuery, 30).then(results => {
+      if (!active) return;
+      const mapped: CmdResult[] = [];
+      const groups = ['project', 'task', 'file', 'user', 'comment', 'decision', 'client', 'invoice'];
+      groups.forEach(type => {
+        const groupItems = results.filter(r => r.entity_type === type);
+        if (groupItems.length > 0) {
+          mapped.push({ id: `_${type}_header`, group: type.toUpperCase(), label: type.toUpperCase() === 'USER' ? 'PEOPLE' : type.toUpperCase() + 'S', onSelect: () => {} });
+          groupItems.forEach(item => {
+             mapped.push({
+               id: `db:${type}:${item.entity_id}`,
+               group: type.toUpperCase(),
+               label: item.title,
+               description: item.context + (item.last_updated ? ` · ${new Date(item.last_updated).toLocaleDateString()}` : ''),
+               icon: type === 'task' ? <Check className="w-3.5 h-3.5 text-signal-warning" /> :
+                     type === 'project' ? <BarChart3 className="w-3.5 h-3.5 text-emerald-400" /> :
+                     type === 'file' ? <FileText className="w-3.5 h-3.5 text-blue-400" /> :
+                     type === 'user' ? <Users className="w-3.5 h-3.5 text-purple-400" /> :
+                     type === 'comment' ? <Activity className="w-3.5 h-3.5 text-orange-400" /> :
+                     <Zap className="w-3.5 h-3.5 text-accent-secondary" />,
+               onSelect: () => {
+                  addRecent({ 
+                     id: `recent:${item.entity_type}:${item.entity_id}`, 
+                     group: 'RECENT', 
+                     label: item.title, 
+                     icon: <Clock className="w-3.5 h-3.5 text-text-quaternary" />, 
+                     onSelect: () => {} 
+                  });
+                  if (item.entity_type === 'project') onNavigate(`/projects/${item.entity_id}/board`);
+                  else if (item.entity_type === 'task') onNavigate(`/execution?task=${item.entity_id}`);
+                  else if (item.entity_type === 'comment') onNavigate(`/workspace?comment=${item.entity_id}`);
+                  else if (item.entity_type === 'file') onNavigate(`/workspace?file=${item.entity_id}`);
+                  else if (item.entity_type === 'user') onNavigate(`/resources/teams?user=${item.entity_id}`);
+                  else if (item.entity_type === 'decision') onNavigate(`/workspace/decisions?decision=${item.entity_id}`);
+                  else if (item.entity_type === 'client') onNavigate(`/resources/finance?client=${item.entity_id}`);
+                  else if (item.entity_type === 'invoice') onNavigate(`/resources/finance?invoice=${item.entity_id}`);
+                  onClose();
+               }
+             });
+          });
+        }
+      });
+      setDbResults(mapped);
+      setIsSearching(false);
+    });
+    return () => { active = false; };
+  }, [debouncedQuery]);
 
   const allResults = useMemo((): CmdResult[] => {
     const rawQuery = debouncedQuery.trim();
@@ -455,6 +527,11 @@ export default function CommandPalette(props: Props) {
         seen.add(id);
 
         const boundOnSelect = () => {
+          if (r.metadata?.route_path) {
+            onNavigate(r.metadata.route_path);
+            onClose();
+            return;
+          }
           const [prefix, val] = r.id.split(':');
           if (prefix === 'nav') {
             onNavigate(val);
@@ -549,6 +626,11 @@ export default function CommandPalette(props: Props) {
         out.push({ id: '_recent_header', group: 'RECENT', label: 'RECENT', onSelect: () => {} });
         recent.forEach(r => {
           const boundOnSelect = () => {
+            if (r.metadata?.route_path) {
+              onNavigate(r.metadata.route_path);
+              onClose();
+              return;
+            }
             const [prefix, val] = r.id.split(':');
             if (prefix === 'nav') {
               onNavigate(val);
@@ -600,35 +682,7 @@ export default function CommandPalette(props: Props) {
       }
     }
 
-    // --- PROJECTS ---
-    if (!hasFilter || groupFilter === 'PROJECTS') {
-      const matchedProjects = q ? filterItems(projects, q) : (hasFilter ? projects : []);
-      if (matchedProjects.length > 0) {
-        out.push({ id: '_proj_header', group: 'PROJECTS', label: 'PROJECTS', onSelect: () => {} });
-        matchedProjects.forEach(p => out.push({
-          id: `proj:${p.id}`, group: 'PROJECTS', label: p.name,
-          description: `${p.execution_mode} · ${p.status}${p.efficiency ? ` · ${p.efficiency}%` : ''}`,
-          icon: <BarChart3 className="w-3.5 h-3.5 text-emerald-400" />,
-          metadata: { project_id: p.id, status: p.status, execution_mode: p.execution_mode },
-          onSelect: () => { addRecent({ id: `proj:${p.id}`, group: 'PROJECTS', label: p.name, icon: <BarChart3 className="w-3.5 h-3.5" />, onSelect: () => {} }); logCmd('project_open', p.name, { project_id: p.id }); setSelectedProject?.(p); onNavigate(`/projects/${p.id}/board`); onClose(); },
-        }));
-      }
-    }
 
-    // --- TASKS ---
-    if (!hasFilter || groupFilter === 'TASKS') {
-      const matchedTasks = q ? filterItems(tasks, q) : (hasFilter ? tasks : []);
-      if (matchedTasks.length > 0) {
-        out.push({ id: '_task_header', group: 'TASKS', label: 'TASKS', onSelect: () => {} });
-        matchedTasks.forEach(t => out.push({
-          id: `task:${t.id}`, group: 'TASKS', label: t.name,
-          description: `${t.status} · ${t.priority}`,
-          icon: <Check className="w-3.5 h-3.5 text-signal-warning" />,
-          metadata: { task_id: t.id, status: t.status, priority: t.priority },
-          onSelect: () => { addRecent({ id: `task:${t.id}`, group: 'TASKS', label: t.name, icon: <Check className="w-3.5 h-3.5" />, onSelect: () => {} }); logCmd('task_open', t.name, { task_id: t.id }); onNavigate(`/execution?task=${t.id}`); onClose(); },
-        }));
-      }
-    }
 
     // --- ACTIONS ---
     if (!hasFilter || groupFilter === 'ACTIONS') {
@@ -674,8 +728,11 @@ export default function CommandPalette(props: Props) {
       }
     }
 
+    if (dbResults.length > 0) {
+      out.push(...dbResults);
+    }
     return out;
-  }, [debouncedQuery, projects, tasks, role, disclosureActive, disclosureLevel]);
+  }, [debouncedQuery, projects, tasks, role, disclosureActive, disclosureLevel, dbResults]);
 
   const flatResults = useMemo(() => allResults.filter(r => !r.id.startsWith('_')), [allResults]);
 
@@ -777,9 +834,16 @@ export default function CommandPalette(props: Props) {
               {/* Results */}
               <div ref={listRef} id="command-results" className="max-h-[50vh] overflow-y-auto py-2" onKeyDown={handleKeyDown} role="listbox" aria-label="Search results">
                 {allResults.length === 0 && (
-                  <div className="px-4 py-8 text-center text-[11px] font-mono text-text-quaternary uppercase">
-                    {debouncedQuery ? 'No results found' : 'Type to search...'}
-                  </div>
+                  isSearching ? (
+                    <div className="px-4 py-8 flex flex-col items-center justify-center gap-2 text-[11px] font-mono text-text-quaternary uppercase">
+                      <Loader className="w-4 h-4 animate-spin text-text-tertiary" />
+                      Searching workspace...
+                    </div>
+                  ) : (
+                    <div className="px-4 py-8 text-center text-[11px] font-mono text-text-quaternary uppercase">
+                      {debouncedQuery ? 'No matching results. Try searching tasks, files, or projects.' : 'Type to search...'}
+                    </div>
+                  )
                 )}
 
                 {allResults.filter(r => r.group !== 'DIVIDER').map((result, idx) => {

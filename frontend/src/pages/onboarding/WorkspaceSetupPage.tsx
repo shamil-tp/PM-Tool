@@ -50,7 +50,8 @@ export function WorkspaceSetupPage() {
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [inviteEmail, setInviteEmail] = useState('');
-  const [invites, setInvites] = useState<string[]>([]);
+  const [inviteDoj, setInviteDoj] = useState(new Date().toISOString().split('T')[0]);
+  const [invites, setInvites] = useState<{email: string, doj: string}[]>([]);
   const [previewHolidays, setPreviewHolidays] = useState<DerivedHoliday[]>([]);
   const [ignoredHolidayDates, setIgnoredHolidayDates] = useState<Set<string>>(new Set());
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -144,7 +145,7 @@ export function WorkspaceSetupPage() {
 
   const addInvite = async () => {
     const email = inviteEmail.trim().toLowerCase();
-    if (!email || invites.includes(email)) return;
+    if (!email || invites.some(i => i.email === email)) return;
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setLocalError("Invalid email format.");
@@ -163,7 +164,8 @@ export function WorkspaceSetupPage() {
             role: 'developer', // Default invited role
             status: 'pending',
             invited_by: user?.id,
-            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            date_of_joining: new Date(inviteDoj).toISOString()
           });
 
         if (inviteError) {
@@ -173,8 +175,9 @@ export function WorkspaceSetupPage() {
           throw inviteError;
         }
       }
-      setInvites(prev => [...prev, email]);
+      setInvites(prev => [...prev, { email, doj: inviteDoj }]);
       setInviteEmail('');
+      setInviteDoj(new Date().toISOString().split('T')[0]);
     } catch (err: any) {
       setLocalError(err?.message || "Failed to save invitation.");
     } finally {
@@ -193,7 +196,7 @@ export function WorkspaceSetupPage() {
           .eq('workspace_id', workspace.id)
           .eq('email', email);
       }
-      setInvites(prev => prev.filter(value => value !== email));
+      setInvites(prev => prev.filter(value => value.email !== email));
     } catch (err: any) {
       setLocalError("Failed to revoke invitation.");
     } finally {
@@ -554,23 +557,34 @@ export function WorkspaceSetupPage() {
 
           {step === 6 && (
             <div className="space-y-5">
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2">
                 <input
                   type="email"
                   value={inviteEmail}
                   onChange={event => setInviteEmail(event.target.value)}
                   placeholder="teammate@company.com"
-                  className="h-11 flex-1 border border-border/50 rounded-lg bg-surface-3 px-4 text-sm text-[var(--pm-on-surface)] outline-none focus:border-accent-primary focus:bg-surface-4 transition-all font-sans"
+                  className="h-11 w-full border border-border/50 rounded-lg bg-surface-3 px-4 text-sm text-[var(--pm-on-surface)] outline-none focus:border-accent-primary focus:bg-surface-4 transition-all font-sans"
                 />
-                <button onClick={addInvite} className="flex h-11 w-11 items-center justify-center rounded-lg bg-text-primary hover:bg-neutral-200 text-bg transition-colors cursor-pointer shadow-sm">
-                  <Plus className="h-4.5 w-4.5" />
-                </button>
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    value={inviteDoj}
+                    onChange={event => setInviteDoj(event.target.value)}
+                    className="h-11 flex-1 border border-border/50 rounded-lg bg-surface-3 px-4 text-sm text-[var(--pm-on-surface)] outline-none focus:border-accent-primary focus:bg-surface-4 transition-all font-sans"
+                  />
+                  <button onClick={addInvite} className="flex h-11 px-4 items-center justify-center rounded-lg bg-text-primary hover:bg-neutral-200 text-bg transition-colors cursor-pointer shadow-sm text-xs font-semibold">
+                    <Plus className="h-4.5 w-4.5 mr-1" /> Add
+                  </button>
+                </div>
               </div>
               <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1 scrollbar-thin">
-                {invites.map(email => (
-                  <div key={email} className="flex items-center justify-between border border-border/50 rounded-lg bg-surface-3 px-4.5 py-3 text-xs font-mono-pm">
-                    <span>{email}</span>
-                    <button onClick={() => removeInvite(email)} disabled={saving} className="text-[var(--pm-on-surface-variant)] hover:text-signal-critical transition-colors">
+                {invites.map(inv => (
+                  <div key={inv.email} className="flex items-center justify-between border border-border/50 rounded-lg bg-surface-3 px-4.5 py-3 text-xs font-mono-pm">
+                    <div>
+                      <span className="block text-[var(--pm-on-surface)] font-medium">{inv.email}</span>
+                      <span className="block text-[10px] text-[var(--pm-on-surface-variant)] mt-0.5">DOJ: {inv.doj}</span>
+                    </div>
+                    <button onClick={() => removeInvite(inv.email)} disabled={saving} className="text-[var(--pm-on-surface-variant)] hover:text-signal-critical transition-colors">
                       <X className="h-4 w-4" />
                     </button>
                   </div>

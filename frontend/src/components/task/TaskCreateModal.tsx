@@ -20,6 +20,7 @@ interface TaskCreateModalProps {
     assignee_id?: string;
     status: TaskStatus;
     priority: 'medium';
+    recurrence_type?: string;
   }) => Promise<void>;
   notify: (msg: string, type: 'success' | 'error' | 'warning' | 'info') => void;
 }
@@ -40,6 +41,7 @@ export function TaskCreateModal({
   const [projectId, setProjectId] = useState(defaultProjectId || '');
   const [estimatedHours, setEstimatedHours] = useState(5);
   const [assigneeId, setAssigneeId] = useState('');
+  const [recurrenceType, setRecurrenceType] = useState('none');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
@@ -61,6 +63,7 @@ export function TaskCreateModal({
         assignee_id: assigneeId || undefined,
         status: defaultStatus,
         priority: 'medium',
+        recurrence_type: recurrenceType,
       });
       
       notify(`Task "${name}" queued successfully.`, "success");
@@ -70,6 +73,7 @@ export function TaskCreateModal({
       setDescription('');
       setEstimatedHours(5);
       setAssigneeId('');
+      setRecurrenceType('none');
     } catch (err: any) {
       notify(`Failed to queue task: ${err.message}`, "error");
     } finally {
@@ -166,12 +170,30 @@ export function TaskCreateModal({
             </div>
             <div className="flex-1 space-y-1.5">
               <label className="block text-[10px] font-medium uppercase tracking-widest text-text-tertiary">Assignee</label>
-              <AssigneePicker
-                users={users}
-                value={assigneeId}
-                onChange={setAssigneeId}
-              />
+                <AssigneePicker
+                  users={users}
+                  value={assigneeId}
+                  onChange={setAssigneeId}
+                  contextText={`${name} ${description}`}
+                />
             </div>
+            {mode === 'task' && (
+              <div className="flex-1 space-y-1.5">
+                <label className="block text-[10px] font-medium uppercase tracking-widest text-text-tertiary">Repeat</label>
+                <select
+                  value={recurrenceType}
+                  onChange={(e) => setRecurrenceType(e.target.value)}
+                  className="w-full bg-surface-2 border border-border/50 p-2.5 text-sm font-medium text-text-primary focus:border-accent-primary/70 focus:bg-surface-3 outline-none transition-all rounded-lg appearance-none cursor-pointer"
+                >
+                  <option value="none">Never</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="yearly">Yearly</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+            )}
           </div>
 
           <div className="pt-6 mt-4 flex justify-end gap-3 border-t border-[var(--pm-border)] dark:border-white/5">

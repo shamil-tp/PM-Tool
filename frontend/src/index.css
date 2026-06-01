@@ -641,3 +641,10 @@ input:focus, select:focus, textarea:focus {
   border-color: transparent !important;
   box-shadow: 0 0 0 2px var(--pm-cyan) !important;
 }
+
+
+/* Fix dropdown option visibility in dark mode */
+select option {
+  background-color: var(--pm-surface-highest);
+  color: var(--pm-on-surface);
+}

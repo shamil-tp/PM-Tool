@@ -4,6 +4,9 @@ import { Database, Shield, Terminal, Lock, X, AlertTriangle, Download, Settings,
 import { User, Project, Team, Profile, Task, UserRole } from '../../types';
 import { hasCapability } from '../../core/auth/permissions';
 import { getLocalDateString } from '../../utils/timeUtils';
+import { MemberDirectory } from '../team/MemberDirectory';
+import { supabase } from '../../lib/supabase';
+import { DocumentGeneratorDropdown } from '../hr/DocumentGeneratorDropdown';
 
 export function LogisticsDashboard({
   profiles,
@@ -24,13 +27,13 @@ export function LogisticsDashboard({
   updateTask?: (taskId: string, updates: Partial<Task>) => Promise<void>,
   systemData: any,
   onSaveData: (updatedData: any) => Promise<void>,
-  role?: string,
-  defaultTab?: 'attendance' | 'paySlab' | 'payroll' | 'orchestration',
+  role?: UserRole,
+  defaultTab?: 'members' | 'attendance' | 'paySlab' | 'payroll' | 'workload',
   hideTabs?: boolean
 }) {
   // systemData is passed from canonical DashboardContext
-  const [activeTab, setActiveTab] = useState<'attendance' | 'paySlab' | 'payroll' | 'orchestration'>(defaultTab || 'orchestration');
-  const canConfigurePaySlabs = hasCapability(role as UserRole | undefined, 'manage_logistics');
+  const [activeTab, setActiveTab] = useState<'members' | 'attendance' | 'paySlab' | 'payroll' | 'workload'>(defaultTab || 'members');
+  const canConfigurePaySlabs = hasCapability(role as UserRole | undefined, 'manage_compensation');
 
   // Attendance states
   const [selectedDate, setSelectedDate] = useState(() => getLocalDateString());
@@ -45,7 +48,7 @@ export function LogisticsDashboard({
   const [currency, setCurrency] = useState<'USD' | 'INR' | 'EUR' | 'CAD' | 'AED'>('USD');
   const [bypassHalfDay, setBypassHalfDay] = useState(false);
 
-  // Dispatch/Orchestration States
+  // workload/workload States
   const [routingTaskId, setRoutingTaskId] = useState<string | null>(null);
   const [routingTaskSearch, setRoutingTaskSearch] = useState('');
 
@@ -63,6 +66,10 @@ export function LogisticsDashboard({
   const [payrollMode, setPayrollMode] = useState<'monthly' | 'custom'>('monthly');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
+  
+  const [compensationRecords, setCompensationRecords] = useState<Record<string, number>>({});
+  const [isFetchingCompensation, setIsFetchingCompensation] = useState(false);
+
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const today = new Date();
     return (today.getMonth() + 1).toString().padStart(2, '0');
@@ -71,8 +78,48 @@ export function LogisticsDashboard({
     const today = new Date();
     return today.getFullYear().toString();
   });
+
+  useEffect(() => {
+    if (hasCapability(role, 'manage_compensation') && (activeTab === 'payroll' || activeTab === 'paySlab')) {
+      const fetchComp = async () => {
+        setIsFetchingCompensation(true);
+        try {
+          // Calculate period bounds
+          const periodStart = `${selectedYear}-${selectedMonth}-01T00:00:00Z`;
+          const nextMonthDate = new Date(parseInt(selectedYear), parseInt(selectedMonth), 1);
+          const periodEnd = nextMonthDate.toISOString();
+
+          const { data } = await supabase.from('compensation_records')
+            .select('employee_id, base_salary, effective_from')
+            .lte('effective_from', periodEnd)
+            .or(`effective_to.is.null,effective_to.gte.${periodStart}`)
+            .order('effective_from', { ascending: false });
+
+          if (data) {
+            const records: Record<string, number> = {};
+            data.forEach(row => {
+              // Because we order by effective_from DESC, the first matching row for an employee
+              // represents the latest active compensation within the period.
+              if (!records[row.employee_id]) {
+                records[row.employee_id] = Number(row.base_salary);
+              }
+            });
+            setCompensationRecords(records);
+          }
+        } catch (error) {
+          console.error("Failed to fetch compensation:", error);
+        } finally {
+          setIsFetchingCompensation(false);
+        }
+      };
+      fetchComp();
+    }
+  }, [role, activeTab, selectedMonth, selectedYear]);
+
   const [editingSalaryUserId, setEditingSalaryUserId] = useState<string | null>(null);
   const [editingSalaryValue, setEditingSalaryValue] = useState('');
+  const [editingSalaryDate, setEditingSalaryDate] = useState(() => getLocalDateString());
+  const [editingSalaryReason, setEditingSalaryReason] = useState('');
 
   // Sync state values when DB systemData updates
   useEffect(() => {
@@ -91,34 +138,34 @@ export function LogisticsDashboard({
   const monthPrefix = `${selectedYear}-${selectedMonth}`;
   const attendanceRecords = systemData.attendance || {};
 
-  // Orchestration & Dispatch calculations
-  const orchestrationMetrics = useMemo(() => {
+  // workload & workload calculations
+  const workloadMetrics = useMemo(() => {
     const activeTasks = tasks.filter(t => t.status !== 'done');
     const inProgressTasks = tasks.filter(t => t.status === 'in_progress');
     const completedTasks = tasks.filter(t => t.status === 'done');
-    const dispatchRate = completedTasks.length > 0 ? Number((completedTasks.length / Math.max(1, tasks.length) * 100).toFixed(1)) : 76.5;
+    const workloadRate = completedTasks.length > 0 ? Number((completedTasks.length / Math.max(1, tasks.length) * 100).toFixed(1)) : 76.5;
 
-    // Route Congestion: average in-progress tasks per active developer
+    // Route overloadedTasks: average in-progress tasks per active developer
     const devs = profiles.filter(p => hasCapability(p.role as UserRole, 'manage_tasks') && !hasCapability(p.role as UserRole, 'manage_projects'));
-    const congestion = devs.length > 0 ? Number((inProgressTasks.length / devs.length).toFixed(1)) : 0;
+    const overloadedTasks = devs.length > 0 ? Number((inProgressTasks.length / devs.length).toFixed(1)) : 0;
     
-    // Escalation Index: high priority active tasks
-    const escalationCount = activeTasks.filter(t => t.priority === 'urgent' || t.priority === 'high').length;
+    // Blocked Tasks: high priority active tasks
+    const blockedTasks = activeTasks.filter(t => t.priority === 'urgent' || t.priority === 'high').length;
     
-    // Pipeline Latency: average estimated hours of uncompleted tasks
+    // Pipeline avgTaskTime: average estimated hours of uncompleted tasks
     const totalEstHours = activeTasks.reduce((acc, t) => acc + (Number(t.estimated_hours) || 0), 0);
-    const latency = activeTasks.length > 0 ? Math.round(totalEstHours / activeTasks.length) : 0;
+    const avgTaskTime = activeTasks.length > 0 ? Math.round(totalEstHours / activeTasks.length) : 0;
 
     return {
-      dispatchRate,
-      congestion,
-      escalationCount,
-      latency
+      workloadRate,
+      overloadedTasks,
+      blockedTasks,
+      avgTaskTime
     };
   }, [tasks, profiles]);
 
   // Backlog/Ready queue to route
-  const dispatchQueue = useMemo(() => {
+  const workloadQueue = useMemo(() => {
     return tasks
       .filter(t => (t.status === 'backlog' || t.status === 'ready' || !t.assignee_id))
       .filter(t => t.name.toLowerCase().includes(routingTaskSearch.toLowerCase()))
@@ -178,7 +225,7 @@ export function LogisticsDashboard({
     const underloadedDevs = executionNodes.filter(n => n.utilization < 70);
 
     if (overloadedDevs.length === 0 || underloadedDevs.length === 0) {
-      alert("System load balancing criteria optimal. No actions dispatched.");
+      alert("System load balancing criteria optimal. No actions workloaded.");
       return;
     }
 
@@ -191,7 +238,7 @@ export function LogisticsDashboard({
         balancedCount++;
       }
     }
-    alert(`Orchestration complete: re-routed ${balancedCount} tasks to balance developer loads.`);
+    alert(`workload complete: re-routed ${balancedCount} tasks to balance developer loads.`);
   };
 
   const payrollData = useMemo(() => {
@@ -248,8 +295,8 @@ export function LogisticsDashboard({
     }
 
     return profiles.map(profile => {
-      const baseSalary = systemData.salaries?.[profile.id] ?? 3000;
-      const joiningDateStr = profile.created_at ? getLocalDateString(new Date(profile.created_at)) : '';
+      const rawDoj = profile.date_of_joining;
+      const joiningDateStr = rawDoj ? getLocalDateString(new Date(rawDoj)) : '';
       
       // Filter weekdays to only those on or after joining date
       const profileWeekdays = allWeekdaysInRange.filter(dateStr => !joiningDateStr || dateStr >= joiningDateStr);
@@ -288,6 +335,10 @@ export function LogisticsDashboard({
         }
       });
 
+      const fullMonthlySalary = compensationRecords[profile.id] ?? 3000;
+      const dailyRate = fullMonthlySalary / 22;
+      const baseSalary = payrollMode === 'custom' ? dailyRate * expectedWorkingDaysForProfile : fullMonthlySalary;
+
       const totalDaysAccounted = Object.keys(attendanceRecords).reduce((acc, dateStr) => {
         if (isDateInRange(dateStr) && (!joiningDateStr || dateStr >= joiningDateStr) && attendanceRecords[dateStr]?.[profile.id]) {
           return acc + 1;
@@ -310,7 +361,6 @@ export function LogisticsDashboard({
         if (deductionMethod === 'fixed') {
           totalDeductions = totalUnpaidDays * unexcusedDeductionAmount;
         } else {
-          const dailyRate = baseSalary / 22;
           totalDeductions = totalUnpaidDays * dailyRate;
         }
       }
@@ -331,7 +381,7 @@ export function LogisticsDashboard({
         expectedWorkingDays: expectedWorkingDaysForProfile
       };
     });
-  }, [profiles, systemData, monthPrefix, allowedCasualLeaves, allowedMedicalLeaves, halfDayRule, unexcusedDeductionAmount, deductionMethod, bypassHalfDay, payrollMode, customStartDate, customEndDate]);
+  }, [profiles, systemData, monthPrefix, allowedCasualLeaves, allowedMedicalLeaves, halfDayRule, unexcusedDeductionAmount, deductionMethod, bypassHalfDay, payrollMode, customStartDate, customEndDate, compensationRecords]);
 
   const handleExportCSV = () => {
     const totalGross = payrollData.reduce((sum, item) => sum + item.baseSalary, 0);
@@ -439,22 +489,64 @@ export function LogisticsDashboard({
   };
 
   const handleSaveSalary = async (userId: string) => {
-    const existingSalaries = systemData.salaries || {};
-    const updatedSalaries = {
-      ...existingSalaries,
-      [userId]: Number(editingSalaryValue) || 0
-    };
+    const salaryValue = Number(editingSalaryValue) || 0;
+    const effectiveFrom = editingSalaryDate || getLocalDateString();
+    const reason = editingSalaryReason || 'Manual adjustment';
+    const workspaceId = profiles[0]?.workspace_id;
+    if (!workspaceId) return;
 
-    await onSaveData({
-      ...systemData,
-      salaries: updatedSalaries
-    });
+    try {
+      // Find currently active compensation
+      const { data: activeRecords } = await supabase
+        .from('compensation_records')
+        .select('id, effective_from')
+        .eq('workspace_id', workspaceId)
+        .eq('employee_id', userId)
+        .is('effective_to', null);
+
+      if (activeRecords && activeRecords.length > 0) {
+        // Validation: Do not allow overlapping periods
+        const active = activeRecords[0];
+        if (effectiveFrom <= active.effective_from) {
+          alert('New compensation effective date must be after the current active compensation start date.');
+          return;
+        }
+
+        // Close previous compensation (1 day before new effective date)
+        const newDateObj = new Date(effectiveFrom);
+        newDateObj.setDate(newDateObj.getDate() - 1);
+        const effectiveTo = getLocalDateString(newDateObj);
+
+        await supabase
+          .from('compensation_records')
+          .update({ effective_to: effectiveTo })
+          .eq('id', active.id);
+      }
+
+      await supabase.from('compensation_records').insert({
+        employee_id: userId,
+        workspace_id: workspaceId,
+        base_salary: salaryValue,
+        effective_from: effectiveFrom,
+        change_reason: reason
+      });
+
+      setCompensationRecords(prev => ({
+        ...prev,
+        [userId]: salaryValue
+      }));
+    } catch (e) {
+      console.error("Failed to save salary", e);
+    }
+    
     setEditingSalaryUserId(null);
+    setEditingSalaryReason('');
   };
 
   // Filter profiles for attendance marking
   const filteredProfiles = profiles.filter(p => {
-    const joiningDateStr = p.created_at ? getLocalDateString(new Date(p.created_at)) : '';
+    const rawDoj = p.date_of_joining;
+    const joiningDateStr = rawDoj ? getLocalDateString(new Date(rawDoj)) : '';
     if (joiningDateStr && selectedDate < joiningDateStr) {
       return false; // Not yet onboarded on selectedDate
     }
@@ -472,7 +564,8 @@ export function LogisticsDashboard({
     let halfDay = 0;
     let absent = 0;
     profiles.forEach(p => {
-      const joiningDateStr = p.created_at ? getLocalDateString(new Date(p.created_at)) : '';
+      const rawDoj = p.date_of_joining;
+    const joiningDateStr = rawDoj ? getLocalDateString(new Date(rawDoj)) : '';
       if (joiningDateStr && selectedDate < joiningDateStr) {
         return; // Skip not yet onboarded
       }
@@ -496,16 +589,26 @@ export function LogisticsDashboard({
         
         {/* Tab Selector */}
         {!hideTabs && (
-        <div className="flex flex-wrap gap-2 bg-surface-3/50 backdrop-blur-md p-1.5 border border-border/50 rounded-xl w-full md:w-auto max-w-full shadow-sm" role="tablist" aria-label="Logistics sections">
-          <button
-            onClick={() => setActiveTab('orchestration')}
+        <div className="flex flex-wrap gap-2 bg-surface-3/50 backdrop-blur-md p-1.5 border border-border/50 rounded-xl w-full md:w-auto max-w-full shadow-sm" role="tablist" aria-label="Team Management sections">
+            <button
+              onClick={() => setActiveTab('members')}
+              role="tab"
+              aria-selected={activeTab === 'members'}
+              aria-controls="tabpanel-members"
+              id="tab-members"
+              className={`flex-1 md:flex-initial text-center whitespace-nowrap px-3 sm:px-4 py-2 text-[9px] sm:text-[10px] font-mono uppercase tracking-wide transition-all ${activeTab === 'members' ? 'bg-[var(--pm-inverse-surface)] text-[var(--pm-inverse-on-surface)] font-semibold' : 'text-text-tertiary hover:text-text-primary'}`}
+            >
+              Members
+            </button>
+            <button
+            onClick={() => setActiveTab('workload')}
             role="tab"
-            aria-selected={activeTab === 'orchestration'}
-            aria-controls="tabpanel-orchestration"
-            id="tab-orchestration"
-            className={`flex-1 md:flex-initial text-center whitespace-nowrap px-3 sm:px-4 py-2 text-[9px] sm:text-[10px] font-mono uppercase tracking-wide transition-all ${activeTab === 'orchestration' ? 'bg-[var(--pm-inverse-surface)] text-[var(--pm-inverse-on-surface)] font-semibold' : 'text-text-tertiary hover:text-text-primary'}`}
+            aria-selected={activeTab === 'workload'}
+            aria-controls="tabpanel-workload"
+            id="tab-workload"
+            className={`flex-1 md:flex-initial text-center whitespace-nowrap px-3 sm:px-4 py-2 text-[9px] sm:text-[10px] font-mono uppercase tracking-wide transition-all ${activeTab === 'workload' ? 'bg-[var(--pm-inverse-surface)] text-[var(--pm-inverse-on-surface)] font-semibold' : 'text-text-tertiary hover:text-text-primary'}`}
           >
-            Dispatch &amp; Routing
+            workload &amp; Routing
           </button>
           <button
             onClick={() => setActiveTab('attendance')}
@@ -517,79 +620,81 @@ export function LogisticsDashboard({
           >
             Attendance
           </button>
-          {canConfigurePaySlabs && (
+          {hasCapability(role, 'manage_compensation') && (
+              <button
+                onClick={() => setActiveTab('paySlab')}
+                role="tab"
+                aria-selected={activeTab === 'paySlab'}
+                aria-controls="tabpanel-paySlab"
+                id="tab-paySlab"
+                className={`flex-1 md:flex-initial text-center whitespace-nowrap px-3 sm:px-4 py-2 text-[9px] sm:text-[10px] font-mono uppercase tracking-wide transition-all ${activeTab === 'paySlab' ? 'bg-[var(--pm-surface)] text-[var(--pm-text)] font-semibold' : 'text-text-tertiary hover:text-text-primary'}`}
+              >
+                Rules &amp; Slabs
+              </button>
+            )}
+            {hasCapability(role, 'manage_compensation') && (
             <button
-              onClick={() => setActiveTab('paySlab')}
+              onClick={() => setActiveTab('payroll')}
               role="tab"
-              aria-selected={activeTab === 'paySlab'}
-              aria-controls="tabpanel-paySlab"
-              id="tab-paySlab"
-              className={`flex-1 md:flex-initial text-center whitespace-nowrap px-3 sm:px-4 py-2 text-[9px] sm:text-[10px] font-mono uppercase tracking-wide transition-all ${activeTab === 'paySlab' ? 'bg-[var(--pm-surface)] text-[var(--pm-text)] font-semibold' : 'text-text-tertiary hover:text-text-primary'}`}
+              aria-selected={activeTab === 'payroll'}
+              aria-controls="tabpanel-payroll"
+              id="tab-payroll"
+              className={`flex-1 md:flex-initial text-center whitespace-nowrap px-3 sm:px-4 py-2 text-[9px] sm:text-[10px] font-mono uppercase tracking-wide transition-all ${activeTab === 'payroll' ? 'bg-[var(--pm-surface)] text-[var(--pm-text)] font-semibold' : 'text-text-tertiary hover:text-text-primary'}`}
             >
-              Rules &amp; Slabs
+              Payroll Compliance
             </button>
-          )}
-          <button
-            onClick={() => setActiveTab('payroll')}
-            role="tab"
-            aria-selected={activeTab === 'payroll'}
-            aria-controls="tabpanel-payroll"
-            id="tab-payroll"
-            className={`flex-1 md:flex-initial text-center whitespace-nowrap px-3 sm:px-4 py-2 text-[9px] sm:text-[10px] font-mono uppercase tracking-wide transition-all ${activeTab === 'payroll' ? 'bg-[var(--pm-surface)] text-[var(--pm-text)] font-semibold' : 'text-text-tertiary hover:text-text-primary'}`}
-          >
-            Payroll Compliance
-          </button>
+            )}
         </div>
         )}
       </div>
 
       {/* Tab Contents */}
       <AnimatePresence mode="wait">
-        {activeTab === 'orchestration' && (
+        {activeTab === 'workload' && (
           <motion.div
-            key="orchestration"
+            key="workload"
             role="tabpanel"
-            id="tabpanel-orchestration"
-            aria-labelledby="tab-orchestration"
+            id="tabpanel-workload"
+            aria-labelledby="tab-workload"
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
             transition={{ duration: 0.2 }}
             className="space-y-8"
           >
-            {/* Real-time Logistics Telemetry Stats */}
+            {/* Real-time Logistics system Stats */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
               <div className="border border-border/50 bg-surface-3/50 backdrop-blur-md p-6 rounded-2xl shadow-sm hover:shadow-md transition-all">
-                <p className="text-[10px] font-bold uppercase text-text-tertiary tracking-wider mb-2">Queue Congestion</p>
-                <p className="text-3xl font-extrabold tracking-tight text-indigo-400">{orchestrationMetrics.congestion} <span className="text-sm font-medium text-text-tertiary">tasks/node</span></p>
+                <p className="text-[10px] font-bold uppercase text-text-tertiary tracking-wider mb-2">Queue overloadedTasks</p>
+                <p className="text-3xl font-extrabold tracking-tight text-indigo-400">{workloadMetrics.overloadedTasks} <span className="text-sm font-medium text-text-tertiary">tasks/node</span></p>
               </div>
               <div className="border border-border/50 bg-surface-3/50 backdrop-blur-md p-6 rounded-2xl shadow-sm hover:shadow-md transition-all">
-                <p className="text-[10px] font-bold uppercase text-text-tertiary tracking-wider mb-2">Dispatch Rate</p>
-                <p className="text-3xl font-extrabold tracking-tight text-cyan-400">{orchestrationMetrics.dispatchRate}%</p>
+                <p className="text-[10px] font-bold uppercase text-text-tertiary tracking-wider mb-2">workload Rate</p>
+                <p className="text-3xl font-extrabold tracking-tight text-cyan-400">{workloadMetrics.workloadRate}%</p>
               </div>
               <div className="border border-border/50 bg-surface-3/50 backdrop-blur-md p-6 rounded-2xl shadow-sm hover:shadow-md transition-all">
-                <p className="text-[10px] font-bold uppercase text-text-tertiary tracking-wider mb-2">Pipeline Latency</p>
-                <p className="text-3xl font-extrabold tracking-tight text-accent-secondary">~{orchestrationMetrics.latency} <span className="text-sm font-medium text-text-tertiary">h/task</span></p>
+                <p className="text-[10px] font-bold uppercase text-text-tertiary tracking-wider mb-2">Pipeline avgTaskTime</p>
+                <p className="text-3xl font-extrabold tracking-tight text-accent-secondary">~{workloadMetrics.avgTaskTime} <span className="text-sm font-medium text-text-tertiary">h/task</span></p>
               </div>
               <div className="border border-border/50 bg-surface-3/50 backdrop-blur-md p-6 rounded-2xl shadow-sm hover:shadow-md transition-all">
-                <p className="text-[10px] font-bold uppercase text-text-tertiary tracking-wider mb-2">Escalation Index</p>
-                <p className="text-3xl font-extrabold tracking-tight text-rose-400">{orchestrationMetrics.escalationCount} <span className="text-sm font-medium text-text-tertiary">anomalies</span></p>
+                <p className="text-[10px] font-bold uppercase text-text-tertiary tracking-wider mb-2">Blocked Tasks</p>
+                <p className="text-3xl font-extrabold tracking-tight text-rose-400">{workloadMetrics.blockedTasks} <span className="text-sm font-medium text-text-tertiary">issues</span></p>
               </div>
             </div>
 
-            {/* Core dispatch layout: Queue list and node board */}
+            {/* Core workload layout: Queue list and node board */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               
-              {/* Backlog dispatch queue */}
+              {/* Backlog workload queue */}
               <div className="lg:col-span-1 border border-border/50 bg-surface-3/50 backdrop-blur-md p-6 rounded-2xl flex flex-col justify-between h-[34rem] shadow-sm">
                 <div className="space-y-4">
                   <div className="flex justify-between items-center pb-3 border-b border-border-subtle">
                     <div>
-                      <h4 className="text-xs font-bold text-text-primary uppercase tracking-wider">Dispatch Queue</h4>
+                      <h4 className="text-xs font-bold text-text-primary uppercase tracking-wider">workload Queue</h4>
                       <p className="text-[8px] font-mono text-text-quaternary uppercase">Unassigned payload backlog</p>
                     </div>
                     <span className="text-[9px] font-mono bg-[var(--pm-surface)]/5 px-2 py-0.5 border border-border-subtle text-text-tertiary">
-                      {dispatchQueue.length} queued
+                      {workloadQueue.length} queued
                     </span>
                   </div>
 
@@ -605,12 +710,12 @@ export function LogisticsDashboard({
                   </div>
 
                   <div className="space-y-2 overflow-y-auto max-h-[22rem] pr-1">
-                    {dispatchQueue.length === 0 ? (
+                    {workloadQueue.length === 0 ? (
                       <div className="py-20 text-center text-[10px] font-mono uppercase text-text-quaternary italic">
                         No unallocated payloads detected
                       </div>
                     ) : (
-                      dispatchQueue.map(task => (
+                      workloadQueue.map(task => (
                         <div key={task.id} className="p-3 border border-border-subtle bg-surface-3 hover:bg-surface-3 rounded-sm space-y-2 relative transition-all">
                           <div className="flex justify-between items-start gap-2">
                             <span className="text-[10px] font-semibold text-text-secondary truncate block w-40">{task.name}</span>
@@ -629,14 +734,14 @@ export function LogisticsDashboard({
                               onClick={() => setRoutingTaskId(routingTaskId === task.id ? null : task.id)}
                               className="flex-1 py-1 bg-indigo-600 hover:bg-indigo-500 text-text-primary font-mono text-[9px] uppercase tracking-wide transition-all rounded-sm"
                             >
-                              {routingTaskId === task.id ? 'Cancel Routing' : 'Route Dispatch'}
+                              {routingTaskId === task.id ? 'Cancel Routing' : 'Route workload'}
                             </button>
                           </div>
 
                           {/* Quick Router drop-panel */}
                           {routingTaskId === task.id && (
                             <div className="mt-2 p-2 bg-bg border border-border rounded-sm space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
-                              <p className="text-[7.5px] font-mono text-text-quaternary uppercase tracking-wide mb-1">Target dispatch node</p>
+                              <p className="text-[7.5px] font-mono text-text-quaternary uppercase tracking-wide mb-1">Target workload node</p>
                               <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
                                 {executionNodes.map(node => (
                                   <button
@@ -714,9 +819,9 @@ export function LogisticsDashboard({
                         </div>
 
                         <div className="space-y-1">
-                          <span className="text-[8px] text-text-quaternary uppercase block">Active Dispatch Queue</span>
+                          <span className="text-[8px] text-text-quaternary uppercase block">Active workload Queue</span>
                           {node.devTasks.length === 0 ? (
-                            <span className="text-[8.5px] italic text-text-quaternary uppercase">Standby: Awaiting dispatch</span>
+                            <span className="text-[8.5px] italic text-text-quaternary uppercase">Standby: Awaiting workload</span>
                           ) : (
                             <div className="space-y-1.5 max-h-24 overflow-y-auto pr-1">
                               {node.devTasks.map(t => (
@@ -737,6 +842,22 @@ export function LogisticsDashboard({
             </div>
           </motion.div>
         )}
+        {activeTab === 'members' && (
+          <motion.div
+            key="members"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            role="tabpanel"
+            id="tabpanel-members"
+            aria-labelledby="tab-members"
+            className="w-full"
+          >
+            <MemberDirectory />
+          </motion.div>
+        )}
+
         {activeTab === 'attendance' && (
           <motion.div
             key="attendance"
@@ -801,7 +922,7 @@ export function LogisticsDashboard({
             <div className="border border-border bg-surface overflow-hidden">
               <div className="p-6 border-b border-border bg-bg flex justify-between items-center">
                 <h3 className="text-xs font-sans tracking-tight uppercase tracking-wide text-text-secondary">Mark System Attendance</h3>
-                <span className="text-[9px] font-mono text-text-tertiary bg-[var(--pm-surface)]/5 px-2 py-0.5 border border-border-subtle uppercase">TELEMETRY_ONLINE</span>
+                <span className="text-[9px] font-mono text-text-tertiary bg-[var(--pm-surface)]/5 px-2 py-0.5 border border-border-subtle uppercase">SYSTEM_ACTIVE</span>
               </div>
 
               <div className="divide-y divide-white/5">
@@ -829,9 +950,9 @@ export function LogisticsDashboard({
                           <div>
                             <div className="flex items-center gap-2">
                               <h4 className="text-sm font-semibold text-text-secondary">{profile.full_name || 'Anonymous User'}</h4>
-                              {profile.created_at && (
+                              {profile.date_of_joining && (
                                 <span className="text-[8px] font-mono bg-surface-3 border border-border text-signal-info px-1.5 py-0.5 rounded-sm" title="Date of Joining">
-                                  DOJ: {getLocalDateString(new Date(profile.created_at))}
+                                  DOJ: {getLocalDateString(new Date(profile.date_of_joining))}
                                 </span>
                               )}
                             </div>
@@ -926,7 +1047,7 @@ export function LogisticsDashboard({
           </motion.div>
         )}
 
-        {activeTab === 'paySlab' && (
+        {hasCapability(role, 'manage_compensation') && activeTab === 'paySlab' && (
           <motion.div
             key="paySlab"
             role="tabpanel"
@@ -1105,7 +1226,7 @@ export function LogisticsDashboard({
           </motion.div>
         )}
 
-        {activeTab === 'payroll' && (
+        {hasCapability(role, 'manage_compensation') && activeTab === 'payroll' && (
           <motion.div
             key="payroll"
             role="tabpanel"
@@ -1204,16 +1325,18 @@ export function LogisticsDashboard({
             {/* Payroll Data Grid */}
             <div className="border border-border bg-surface overflow-hidden">
               <div className="p-6 border-b border-border bg-bg flex justify-between items-center">
-                <h3 className="text-xs font-sans tracking-tight uppercase tracking-wide text-text-secondary font-bold">Compiled Month Analytics Sheet</h3>
+                <h3 className="text-xs font-sans tracking-tight uppercase tracking-wide text-text-secondary font-bold">
+                  {payrollMode === 'monthly' ? 'Compiled Month Analytics Sheet' : 'Compiled Custom Range Analytics Sheet'}
+                </h3>
                 <span className="text-[10px] font-mono text-text-tertiary">Scope: {payrollMode === 'monthly' ? monthPrefix : `${customStartDate || 'TBD'} to ${customEndDate || 'TBD'}`}</span>
               </div>
-
-              <div>
+              <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse ">
                   <thead>
                     <tr className="border-b border-border bg-surface-3">
                       <th className="p-4 text-[10px] font-mono uppercase tracking-wider text-text-tertiary">System Profile</th>
                       <th className="p-4 text-[10px] font-mono uppercase tracking-wider text-text-tertiary text-right">Base Salary ({activeSymbol.trim()})</th>
+                      <th className="p-4 text-[10px] font-mono uppercase tracking-wider text-text-tertiary text-center">Actions</th>
                       <th className="p-4 text-[10px] font-mono uppercase tracking-wider text-text-tertiary text-center">Attendance Summary (Days)</th>
                       <th className="p-4 text-[10px] font-mono uppercase tracking-wider text-text-tertiary text-center">Leaves / Exceeded Allowed</th>
                       <th className="p-4 text-[10px] font-mono uppercase tracking-wider text-text-tertiary text-center font-bold text-signal-critical/90">Deductible Days</th>
@@ -1251,9 +1374,9 @@ export function LogisticsDashboard({
                             <div>
                               <div className="flex items-center gap-1.5">
                                 <h4 className="text-xs font-semibold text-text-secondary">{profile.full_name || 'Anonymous User'}</h4>
-                                {profile.created_at && (
-                                  <span className="text-[7.5px] font-mono bg-surface-3 border border-border text-signal-info px-1 py-0.2 rounded-sm" title={`Joined: ${getLocalDateString(new Date(profile.created_at))}`}>
-                                    DOJ: {getLocalDateString(new Date(profile.created_at))}
+                                {profile.date_of_joining && (
+                                  <span className="text-[7.5px] font-mono bg-surface-3 border border-border text-signal-info px-1 py-0.2 rounded-sm" title={`Joined: ${getLocalDateString(new Date(profile.date_of_joining))}`}>
+                                    DOJ: {getLocalDateString(new Date(profile.date_of_joining))}
                                   </span>
                                 )}
                               </div>
@@ -1264,19 +1387,38 @@ export function LogisticsDashboard({
                           {/* Base Salary (Editable) */}
                           <td className="p-4 text-right">
                             {isEditing ? (
-                              <div className="flex items-center gap-1.5 justify-end">
-                                <input
-                                  type="number"
-                                  value={editingSalaryValue}
-                                  onChange={(e) => setEditingSalaryValue(e.target.value)}
-                                  className="w-20 bg-bg border border-border px-2 py-1 text-xs font-mono text-right text-text-primary focus:border-border-subtle0 outline-none"
-                                />
-                                <button
-                                  onClick={() => handleSaveSalary(profile.id)}
-                                  className="p-1 border border-border bg-signal-safe-bg text-signal-safe hover:bg-signal-safe-bg"
-                                >
-                                  <Check className="w-3.5 h-3.5" />
-                                </button>
+                              <div className="flex flex-col gap-1.5 justify-end w-48 ml-auto">
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="number"
+                                    placeholder="Amount"
+                                    value={editingSalaryValue}
+                                    onChange={(e) => setEditingSalaryValue(e.target.value)}
+                                    className="flex-1 bg-bg border border-border px-2 py-1 text-xs font-mono text-right text-text-primary focus:border-border-subtle0 outline-none"
+                                  />
+                                  <input
+                                    type="date"
+                                    value={editingSalaryDate}
+                                    onChange={(e) => setEditingSalaryDate(e.target.value)}
+                                    className="w-[100px] bg-bg border border-border px-2 py-1 text-[10px] font-mono text-text-primary focus:border-border-subtle0 outline-none"
+                                  />
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="text"
+                                    placeholder="Reason for change"
+                                    value={editingSalaryReason}
+                                    onChange={(e) => setEditingSalaryReason(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleSaveSalary(profile.id)}
+                                    className="flex-1 bg-bg border border-border px-2 py-1 text-xs font-mono text-text-primary focus:border-border-subtle0 outline-none"
+                                  />
+                                  <button
+                                    onClick={() => handleSaveSalary(profile.id)}
+                                    className="p-1 border border-border bg-signal-safe-bg text-signal-safe hover:bg-signal-safe-bg shrink-0"
+                                  >
+                                    <Check className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
                               </div>
                             ) : (
                               <div className="flex items-center justify-end gap-2 group/sal">
@@ -1292,6 +1434,24 @@ export function LogisticsDashboard({
                                 </button>
                               </div>
                             )}
+                          </td>
+
+                          {/* HR Actions */}
+                          <td className="p-4 text-center">
+                            <DocumentGeneratorDropdown
+                              workspaceId={profile.workspace_id}
+                              type="salary_slip"
+                              companyName="Your Company"
+                              buttonText="Slip"
+                              fileName={`Salary_Slip_${profile.full_name.replace(/\s+/g, '_')}_${payrollMode === 'monthly' ? monthPrefix : 'Custom'}`}
+                              data={{
+                                employee_name: profile.full_name,
+                                month: payrollMode === 'monthly' ? monthPrefix : 'Custom Period',
+                                net_pay: netPayable.toLocaleString(),
+                                deductions: totalDeductions.toLocaleString(),
+                                base_salary: baseSalary.toLocaleString()
+                              }}
+                            />
                           </td>
 
                           {/* Attendance */}

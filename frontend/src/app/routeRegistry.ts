@@ -42,12 +42,14 @@ export const CANONICAL_ROUTES: AppRoute[] = [
   // Resources routes
   { id: 'work-logs', path: '/resources/work-logs', label: 'Work Logs', iconName: 'Notebook', capability: 'view_reports', group: 'resources', disclosureTier: 'operational' },
   { id: 'logistics', path: '/resources', label: 'Logistics', iconName: 'PhosphorGitBranch', capability: 'manage_logistics', group: 'resources', disclosureTier: 'operational' },
+  { id: 'finance', path: '/resources/finance', label: 'Accounts & Finance', iconName: 'Bank', capability: 'manage_finance', group: 'resources', disclosureTier: 'platform' },
   { id: 'teams', path: '/resources/teams', label: 'Team Roster', iconName: 'UsersThree', capability: 'view_teams', group: 'resources', disclosureTier: 'operational' },
   { id: 'capacity', path: '/resources/capacity', label: 'Capacity Forecast', iconName: 'BarChart3', capability: 'view_reports', group: 'resources', disclosureTier: 'operational' },
   { id: 'portfolio', path: '/workspace/portfolio', label: 'Project Sponsors', iconName: 'Building2', capability: 'view_stakeholders', group: 'resources', disclosureTier: 'intelligence' },
   { id: 'audit', path: '/control/audit', label: 'Audit Log', iconName: 'Activity', capability: 'view_audit_log', group: 'resources', disclosureTier: 'platform' },
   
   // System routes
+  { id: 'document-templates', path: '/control/document-templates', label: 'Document Templates', iconName: 'FileText', capability: 'manage_settings', group: 'system', disclosureTier: 'platform' },
   { id: 'identity', path: '/control/identity', label: 'Admin & Identity', iconName: 'Shield', capability: 'platform_governance', group: 'system', disclosureTier: 'platform' },
   { id: 'automations', path: '/control/automations', label: 'Automations', iconName: 'Zap', capability: 'manage_automations', group: 'system', disclosureTier: 'platform' },
   { id: 'mission-control', path: '/control/mission-control', label: 'Mission Control', iconName: 'Broadcast', capability: 'view_mission_control', group: 'intelligence', disclosureTier: 'platform' },

@@ -52,7 +52,7 @@ export default function CommandAnalytics({ isOpen, onClose, role, workspaceId, p
   const [logged, setLogged] = React.useState(false);
 
   const scope = getScopeLabel(role);
-  const hasTelemetry = workspaceId && (trend.length > 0 || friction.length > 0 || chains.length > 0 || health !== null);
+  const hasData = workspaceId && (trend.length > 0 || friction.length > 0 || chains.length > 0 || health !== null);
 
   useEffect(() => {
     if (!isOpen || !workspaceId) return;
@@ -133,15 +133,14 @@ export default function CommandAnalytics({ isOpen, onClose, role, workspaceId, p
                   </div>
                 )}
 
-                {!loading && !hasTelemetry && (
+                {!loading && !hasData && (
                   <div className="flex flex-col items-center justify-center py-12 gap-3">
-                    <Shield className="w-8 h-8 text-text-quaternary" />
-                    <span className="text-[11px] font-mono text-text-quaternary uppercase tracking-wider">Insufficient workspace telemetry</span>
+                    <span className="text-[11px] font-mono text-text-quaternary uppercase tracking-wider">Not enough workspace data</span>
                     <span className="text-[9px] font-mono text-text-quaternary">Use the command palette (Ctrl+K) to generate intelligence data</span>
                   </div>
                 )}
 
-                {!loading && hasTelemetry && (
+                {!loading && hasData && (
                   <>
                     {/* Data Scope */}
                     <div className="flex items-center gap-2 px-3 py-2 bg-surface-3 border border-border-subtle">

@@ -65,7 +65,7 @@ export function TaskCard({
   const isCompact = density === 'compact';
   const isExecutive = density === 'executive';
 
-  // Real-time telemetry calculations
+  // Real-time metrics calculations
   const elapsedDays = (Date.now() - new Date(task.created_at).getTime()) / (1000 * 60 * 60 * 24);
   const estimatedDays = (task.estimated_hours || 0) / 8;
   const drift = elapsedDays - estimatedDays;

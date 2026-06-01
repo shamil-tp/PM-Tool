@@ -252,9 +252,9 @@ export function AdminPanel() {
       {/* ── Header ─────────────────────────────────────────────── */}
       <div className="flex items-end justify-between px-1 pt-2">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Access &amp; Identity</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Access Control</h1>
           <p className="text-sm mt-1" style={{ color: 'var(--pm-on-surface-variant)' }}>
-            Manage workspace members, roles, and unit allocation.
+            Manage workspace roles and access.
           </p>
         </div>
         <span className="font-mono-pm text-[10px] uppercase tracking-[0.2em] px-3 py-1 rounded"

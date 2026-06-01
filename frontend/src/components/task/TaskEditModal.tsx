@@ -6,6 +6,7 @@ import { hasCapability } from '../../core/auth/permissions';
 import { AssigneePicker } from './AssigneePicker';
 import { TaskDiscussionTab } from './TaskDiscussionTab';
 import { TaskActivityTab } from './TaskActivityTab';
+import { FilePanel } from '../common/FilePanel';
 
 interface TaskEditModalProps {
   isOpen: boolean;
@@ -34,7 +35,7 @@ export function TaskEditModal({
   const [estimatedHours, setEstimatedHours] = useState(task.estimated_hours || 5);
   const [assigneeId, setAssigneeId] = useState(task.assignee_id || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [activeTab, setActiveTab] = useState<'details' | 'discussion' | 'activity'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'discussion' | 'activity' | 'files'>('details');
 
   useEffect(() => {
     if (isOpen) {
@@ -118,6 +119,12 @@ export function TaskEditModal({
           >
             Activity
           </button>
+          <button
+            onClick={() => setActiveTab('files')}
+            className={`pb-2 text-[10px] font-mono tracking-wide uppercase transition-colors ${activeTab === 'files' ? 'text-accent-primary border-b-2 border-accent-primary' : 'text-text-quaternary hover:text-text-secondary'}`}
+          >
+            Files
+          </button>
         </div>
 
         {activeTab === 'details' && (
@@ -182,6 +189,7 @@ export function TaskEditModal({
                 value={assigneeId}
                 onChange={setAssigneeId}
                 disabled={isDeveloper}
+                contextText={`${name} ${description}`}
               />
             </div>
           </div>
@@ -216,6 +224,17 @@ export function TaskEditModal({
 
         {activeTab === 'activity' && (
           <TaskActivityTab taskId={task.id} />
+        )}
+
+        {activeTab === 'files' && (
+          <div className="h-[400px] overflow-y-auto">
+            <FilePanel 
+              entityType="task" 
+              entityId={task.id} 
+              currentUserId={currentUserProfile?.id} 
+              canEdit={!isDeveloper} 
+            />
+          </div>
         )}
       </motion.div>
     </div>
