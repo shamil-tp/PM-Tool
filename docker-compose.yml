@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+        - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+        - VITE_CALENDAR_API_URL=${VITE_CALENDAR_API_URL}
+    ports:
+      - "3000:80"
+    depends_on:
+      - calendar-backend
+      - product-key-backend
+    restart: unless-stopped
+
+  calendar-backend:
+    build:
+      context: ./backend/calender
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5000"
+    environment:
+      - PORT=5000
+      - DB=${DB}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - REDIRECT_URI=${REDIRECT_URI}
+      - JWT_SECRET=${JWT_SECRET}
+    restart: unless-stopped
+
+  product-key-backend:
+    build:
+      context: ./backend/product-key
+      dockerfile: Dockerfile
+    ports:
+      - "5002:5000"
+    environment:
+      - PORT=5000
+      - DB=${DB}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - REDIRECT_URI=${REDIRECT_URI}
+      - JWT_SECRET=${JWT_SECRET}
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:6.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    restart: unless-stopped
+    # If you ever want the backends to use this local MongoDB instead of your Atlas URL,
+    # change their DB variable to: DB=mongodb://mongodb:27017/pm-tool
+
+  postgresql:
+    image: postgres:15
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: mysecretpassword
+      POSTGRES_DB: pm-tool
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    # We will initialize this with your Postgres schema tomorrow.
+
+volumes:
+  mongodb_data:
+  postgres_data:
