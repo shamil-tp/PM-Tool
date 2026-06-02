@@ -5894,7 +5894,7 @@ ALTER TABLE ONLY public.user_skills
 --
 
 ALTER TABLE ONLY public.users
-    ADD CONSTRAINT users_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
+    -- ADD CONSTRAINT users_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 
 --
