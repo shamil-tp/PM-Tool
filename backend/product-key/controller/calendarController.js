@@ -168,7 +168,7 @@ exports.getEventsInRange = async (req, res) => {
 
             if (googleEvents && googleEvents.data && googleEvents.data.items) {
                 const gEvents = googleEvents.data.items.map(item => ({
-                    id: \`google-\${item.id}\`,
+                    id: `google-${item.id}`,
                     workspace_id,
                     event_type: 'meeting',
                     title: item.summary || 'Google Event',

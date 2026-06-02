@@ -21,6 +21,8 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - REDIRECT_URI=${REDIRECT_URI}
       - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      - mongodb
     restart: unless-stopped
 
   product-key-backend:
@@ -34,6 +36,8 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - REDIRECT_URI=${REDIRECT_URI}
       - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      - mongodb
     restart: unless-stopped
 
   core-backend:
