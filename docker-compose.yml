@@ -10,7 +10,7 @@ services:
         - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
         - VITE_CALENDAR_API_URL=${VITE_CALENDAR_API_URL}
     ports:
-      - "3000:80"
+      - "3077:80"
     depends_on:
       - calendar-backend
       - product-key-backend

@@ -4,7 +4,7 @@ services:
   frontend:
     image: shamiltp/pm-tool-frontend:latest
     ports:
-      - "3000:80"
+      - "3077:80"
     depends_on:
       - calendar-backend
       - product-key-backend

@@ -47,7 +47,7 @@ export function Login() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('http://localhost:5003/api/auth/login', {
+      const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifier, password }),
@@ -71,7 +71,7 @@ export function Login() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('http://localhost:5003/api/auth/register', {
+      const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, email, password, full_name: fullName }),
