@@ -3,11 +3,11 @@ CREATE TABLE IF NOT EXISTS auth.users (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     email text UNIQUE
 );
-CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid AS $$$
+CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid AS $$
 BEGIN
     RETURN '00000000-0000-0000-0000-000000000000'::uuid;
 END;
-$$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 --
 -- PostgreSQL database dump
