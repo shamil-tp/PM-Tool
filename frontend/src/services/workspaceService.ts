@@ -1,4 +1,4 @@
-import type { User } from '@supabase/supabase-js';
+﻿import type { User } from '../lib/supabase';
 import { supabase } from '../lib/supabase';
 import type { Workspace, WorkspaceSettings } from '../types/workspace';
 import { calendarEventService } from './calendarEventService';

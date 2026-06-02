@@ -298,6 +298,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const initAuth = async () => {
       try {
+        // --- Local Auth Check ---
+        const localUserStr = localStorage.getItem('local_user');
+        const localToken = localStorage.getItem('local_access_token');
+        if (localUserStr && localToken) {
+          try {
+            const localUser = JSON.parse(localUserStr);
+            setUser(localUser);
+            setProfile(localUser);
+            setProfileResolved(true);
+            setLoading(false);
+            loadingRef.current = false;
+            if (safetyTimeoutRef.current) {
+              clearTimeout(safetyTimeoutRef.current);
+              safetyTimeoutRef.current = null;
+            }
+            return;
+          } catch(e) {
+            console.error("Failed to parse local user", e);
+          }
+        }
+        // ------------------------
+
         const { data: { session } } = await supabase.auth.getSession();
         if (!mounted) return;
         
@@ -425,6 +447,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     await handleSessionExpiry('expired');
+    localStorage.removeItem('local_user');
+    localStorage.removeItem('local_access_token');
+    localStorage.removeItem('local_refresh_token');
     if (isSupabaseConfigured) {
       await supabase.auth.signOut();
     }

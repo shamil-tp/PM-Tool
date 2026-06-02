@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import type { User } from '@supabase/supabase-js';
+import type { User } from '../lib/supabase';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { createWorkspaceForUser, getWorkspaceForUser, updateWorkspaceSettings as persistWorkspaceSettings, rowToWorkspace } from '../services/workspaceService';
 import type { Workspace, WorkspaceSettings } from '../types/workspace';

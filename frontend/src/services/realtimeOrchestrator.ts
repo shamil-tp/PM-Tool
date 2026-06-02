@@ -1,5 +1,5 @@
-import { supabase, createRealtimeChannel } from '../lib/supabase';
-import type { RealtimeChannel } from '@supabase/supabase-js';
+﻿import { supabase, createRealtimeChannel } from '../lib/supabase';
+import type { RealtimeChannel } from '../lib/supabase';
 
 class RealtimeOrchestrator {
   private channels: Map<string, RealtimeChannel> = new Map();

@@ -1,5 +1,5 @@
-import { supabase } from '../lib/supabase';
-import type { PostgrestError } from '@supabase/supabase-js';
+﻿import { supabase } from '../lib/supabase';
+import type { PostgrestError } from '../lib/supabase';
 
 export interface CompanyBillingProfile {
   id: string;

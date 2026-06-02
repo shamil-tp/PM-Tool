@@ -2,13 +2,7 @@ version: '3.8'
 
 services:
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-        - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
-        - VITE_CALENDAR_API_URL=${VITE_CALENDAR_API_URL}
+    image: shamiltp/pm-tool-frontend:latest
     ports:
       - "3000:80"
     depends_on:
@@ -17,9 +11,7 @@ services:
     restart: unless-stopped
 
   calendar-backend:
-    build:
-      context: ./backend/calender
-      dockerfile: Dockerfile
+    image: shamiltp/pm-tool-calendar:latest
     ports:
       - "5001:5000"
     environment:
@@ -32,9 +24,7 @@ services:
     restart: unless-stopped
 
   product-key-backend:
-    build:
-      context: ./backend/product-key
-      dockerfile: Dockerfile
+    image: shamiltp/pm-tool-product-key:latest
     ports:
       - "5002:5000"
     environment:
@@ -47,9 +37,7 @@ services:
     restart: unless-stopped
 
   core-backend:
-    build:
-      context: ./backend/core
-      dockerfile: Dockerfile
+    image: shamiltp/pm-tool-core-backend:latest
     ports:
       - "5003:5003"
     environment:
@@ -68,8 +56,6 @@ services:
     volumes:
       - mongodb_data:/data/db
     restart: unless-stopped
-    # If you ever want the backends to use this local MongoDB instead of your Atlas URL,
-    # change their DB variable to: DB=mongodb://mongodb:27017/pm-tool
 
   postgresql:
     image: postgres:15

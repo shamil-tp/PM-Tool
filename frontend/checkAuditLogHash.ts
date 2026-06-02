@@ -1,10 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from './src/lib/supabase';
 import crypto from 'crypto';
-
-const SUPABASE_URL = "https://ctizplvjglydyrjqaalx.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0aXpwbHZqZ2x5ZHlyanFhYWx4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0MjMxNzEsImV4cCI6MjA5Mzk5OTE3MX0.bxLE_GxWW6HyAsAjg7ZxPUdyewy7VViLCvA7JikLXPA";
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 function sha256(message: string): string {
   return crypto.createHash('sha256').update(message).digest('hex');

@@ -1,7 +1,7 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+﻿import { useEffect, useRef, useCallback, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { dedupPayload } from '../lib/realtimeDedup';
-import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import type { RealtimePostgresChangesPayload } from '../lib/supabase';
 
 type EventType = 'INSERT' | 'UPDATE' | 'DELETE' | '*';
 
