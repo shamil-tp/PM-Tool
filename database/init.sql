@@ -5206,7 +5206,7 @@ ALTER TABLE ONLY public.doc_versions
 --
 
 ALTER TABLE ONLY public.document_template_history
-    ADD CONSTRAINT document_template_history_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id);
+    ADD CONSTRAINT document_template_history_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
 
 
 --
@@ -5222,7 +5222,7 @@ ALTER TABLE ONLY public.document_template_history
 --
 
 ALTER TABLE ONLY public.document_templates
-    ADD CONSTRAINT document_templates_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id);
+    ADD CONSTRAINT document_templates_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
 
 
 --
@@ -5950,7 +5950,7 @@ ALTER TABLE ONLY public.workspace_settings
 --
 
 ALTER TABLE ONLY public.workspaces
-    ADD CONSTRAINT workspaces_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+    ADD CONSTRAINT workspaces_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
