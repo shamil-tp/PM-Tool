@@ -9,6 +9,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION auth.email() RETURNS text AS $$
+BEGIN
+    RETURN 'admin@example.com'::text;
+END;
+$$ LANGUAGE plpgsql;
+
 --
 -- PostgreSQL database dump
 --
