@@ -238,6 +238,16 @@ export const calendarEventService = {
       url.searchParams.append('start_date', startDate);
       url.searchParams.append('end_date', endDate);
       if (eventType) url.searchParams.append('event_type', eventType);
+
+      try {
+        const localUserStr = localStorage.getItem('local_user');
+        if (localUserStr) {
+          const profile = JSON.parse(localUserStr);
+          if (profile.role) {
+            url.searchParams.append('role', profile.role);
+          }
+        }
+      } catch (e) {}
       
       const res = await fetch(url.toString(), {
         headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }

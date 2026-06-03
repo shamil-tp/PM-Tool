@@ -12,6 +12,9 @@ export interface CalendarEvent {
   end: string;
   sourceType?: string;
   sourceKey?: string;
+  visibility?: 'private' | 'global' | 'team';
+  team_id?: string;
+  owner_id?: string;
 }
 
 export interface UpsertParams {
@@ -43,20 +46,6 @@ const getHeaders = () => {
 };
 
 export const calendarService = {
-  getAuthUrl(): string {
-    let token = '';
-    try {
-      const supabaseSessionStr = localStorage.getItem('sb-' + ((import.meta as any).env.VITE_SUPABASE_URL ? new URL((import.meta as any).env.VITE_SUPABASE_URL).hostname.split('.')[0] : '') + '-auth-token');
-      if (supabaseSessionStr) {
-        const session = JSON.parse(supabaseSessionStr);
-        token = session?.access_token || '';
-      }
-    } catch (e) {
-      console.warn(e);
-    }
-    return `${CALENDAR_API_URL}/auth/google${token ? `?token=${token}` : ''}`;
-  },
-
   async getConfig(): Promise<{ googleOAuthEnabled: boolean }> {
     try {
       const response = await fetch(`${CALENDAR_API_URL}/config`, {
@@ -82,7 +71,10 @@ export const calendarService = {
         start: row.start_date,
         end: row.end_date,
         sourceType: row.event_type || 'meeting',
-        sourceKey: row.source_id || row.id
+        sourceKey: row.source_id || row.id,
+        visibility: row.visibility,
+        team_id: row.team_id,
+        owner_id: row.owner_id
       }));
     } catch (e: any) {
       console.warn('[calendarService] getEvents failed:', e);
@@ -99,7 +91,9 @@ export const calendarService = {
         description: event.description,
         start_date: event.start,
         end_date: event.end,
-        event_type: event.event_type || 'meeting'
+        event_type: event.event_type || 'meeting',
+        visibility: event.visibility || 'private',
+        team_id: event.team_id
       } as any);
 
       if (!created) throw new Error("Failed to create event");
@@ -111,7 +105,10 @@ export const calendarService = {
         start: created.start_date,
         end: created.end_date,
         sourceType: created.event_type,
-        sourceKey: created.id
+        sourceKey: created.id,
+        visibility: created.visibility,
+        team_id: created.team_id,
+        owner_id: created.owner_id
       };
     } catch (e: any) {
       console.warn('[calendarService] createEvent failed:', e);
@@ -127,6 +124,8 @@ export const calendarService = {
       if (event.description !== undefined) updates.description = event.description;
       if (event.start !== undefined) updates.start_date = event.start;
       if (event.end !== undefined) updates.end_date = event.end;
+      if (event.visibility !== undefined) updates.visibility = event.visibility;
+      if (event.team_id !== undefined) updates.team_id = event.team_id;
 
       await calendarEventService.updateEvent(id, updates);
       
@@ -137,7 +136,9 @@ export const calendarService = {
         start: event.start || new Date().toISOString(),
         end: event.end || new Date().toISOString(),
         sourceType: 'meeting',
-        sourceKey: id
+        sourceKey: id,
+        visibility: event.visibility || 'private',
+        team_id: event.team_id
       };
     } catch (e: any) {
       console.warn('[calendarService] updateEvent failed:', e);

@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar as CalendarIcon, Plus, Trash2, Edit2, X, RefreshCw, ChevronLeft, ChevronRight, Grid, List, CheckCircle, Check } from 'lucide-react';
+import { Calendar as CalendarIcon, Plus, Trash2, Edit2, X, RefreshCw, ChevronLeft, ChevronRight, Grid, List } from 'lucide-react';
 import { calendarService, CalendarEvent } from '../../services/calendarService';
 import { useAuth } from '../../context/AuthContext';
 import { useWorkspace } from '../../context/WorkspaceContext';
+import { useOperationalData } from '../../context/OperationalDataContext';
 
 interface EventFormData {
   summary: string;
   description: string;
   start: string;
   end: string;
+  visibility: 'private' | 'global' | 'team';
+  team_id: string;
 }
 
 // Timezone-aware date string builder for datetime-local inputs
@@ -20,12 +23,10 @@ const toLocalISOString = (date: Date) => {
 export function CalendarView() {
   const { user, profile } = useAuth();
   const { workspace } = useWorkspace();
+  const { teams } = useOperationalData();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [connectedAccounts, setConnectedAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
-  const [isGoogleOAuthEnabled, setIsGoogleOAuthEnabled] = useState(true);
   
   // View states
   const [viewMode, setViewMode] = useState<'month' | 'list'>('month');
@@ -40,6 +41,8 @@ export function CalendarView() {
     description: '',
     start: toLocalISOString(new Date()),
     end: toLocalISOString(new Date(Date.now() + 3600000)),
+    visibility: 'private',
+    team_id: ''
   });
 
   const notifyToast = (message: string, type: 'success' | 'error' | 'warning' | 'info') => {
@@ -69,82 +72,11 @@ export function CalendarView() {
     }
   };
 
-  const fetchAccounts = async () => {
-    if (!workspace?.id) return;
-    try {
-      const { fetchConnectedAccounts } = await import('../../services/integrationService');
-      const data = await fetchConnectedAccounts(workspace.id);
-      setConnectedAccounts(data || []);
-    } catch (e) {
-      console.warn("Failed to fetch connected accounts:", e);
-    }
-  };
-
-  const fetchConfig = async () => {
-    try {
-      const config = await calendarService.getConfig();
-      setIsGoogleOAuthEnabled(config.googleOAuthEnabled);
-    } catch (e) {
-      console.warn("Failed to fetch calendar config:", e);
-    }
-  };
-
   useEffect(() => {
     if (workspace?.id) {
       fetchEvents();
-      fetchAccounts();
-      fetchConfig();
     }
   }, [workspace?.id]);
-
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data === 'google_calendar_connected') {
-        fetchAccounts();
-        fetchEvents();
-      }
-    };
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, []);
-
-  const handleConnect = () => {
-    const width = 500;
-    const height = 600;
-    const left = window.screen.width / 2 - width / 2;
-    const top = window.screen.height / 2 - height / 2;
-    window.open(
-      calendarService.getAuthUrl(),
-      'Google Calendar Auth',
-      `width=${width},height=${height},left=${left},top=${top}`
-    );
-  };
-
-  const handleSync = async () => {
-    const googleAccount = connectedAccounts.find(a => a.service === 'google_calendar');
-    if (!workspace?.id || !googleAccount?.access_token) {
-      notifyToast('Google Calendar is not authorized yet.', 'error');
-      return;
-    }
-    setSyncing(true);
-    setError('');
-    try {
-      const { syncGoogleCalendar } = await import('../../services/integrationService');
-      const result = await syncGoogleCalendar(workspace.id, googleAccount.access_token);
-      if (result.success) {
-        notifyToast(result.message || 'Google Calendar synced successfully.', 'success');
-        await fetchEvents();
-      } else {
-        throw new Error(result.message || 'Sync failed');
-      }
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Failed to sync with Google Calendar.');
-      notifyToast(err.message || 'Sync failed.', 'error');
-    } finally {
-      setSyncing(false);
-    }
-  };
 
   const handleOpenModal = (event?: CalendarEvent) => {
     if (event) {
@@ -166,6 +98,8 @@ export function CalendarView() {
         description: event.description || '',
         start: toLocalISOString(new Date(event.start)),
         end: toLocalISOString(new Date(event.end)),
+        visibility: event.visibility || 'private',
+        team_id: event.team_id || ''
       });
     } else {
       if (profile?.role === 'viewer') {
@@ -178,6 +112,8 @@ export function CalendarView() {
         description: '',
         start: toLocalISOString(new Date()),
         end: toLocalISOString(new Date(Date.now() + 3600000)),
+        visibility: 'private',
+        team_id: ''
       });
     }
     setIsModalOpen(true);
@@ -198,6 +134,8 @@ export function CalendarView() {
       description: '',
       start: toLocalISOString(start),
       end: toLocalISOString(end),
+      visibility: 'private',
+      team_id: ''
     });
     setIsModalOpen(true);
   };
@@ -305,37 +243,20 @@ export function CalendarView() {
     });
   };
 
-  const getEventBadgeStyle = (sourceType?: string) => {
-    const type = (sourceType || 'meeting').toLowerCase();
-    if (type === 'holiday' || type === 'festival' || type === 'regional') {
+  const getEventBadgeStyle = (event: CalendarEvent) => {
+    const type = (event.sourceType || 'meeting').toLowerCase();
+    if (type === 'holiday' || type === 'festival' || type === 'regional' || type === 'company') {
       return 'bg-rose-500/10 border-rose-500/20 text-rose-400 hover:bg-rose-500/20';
     }
-    if (type === 'company') {
-      return 'bg-purple-500/10 border-purple-500/20 text-purple-400 hover:bg-purple-500/20';
+    if (event.visibility === 'global') {
+      return 'bg-blue-500/10 border-blue-500/20 text-blue-500 hover:bg-blue-500/20';
     }
-    return 'bg-sky-500/10 border-sky-500/20 text-sky-400 hover:bg-sky-500/20';
+    if (event.visibility === 'team') {
+      return 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500 hover:bg-emerald-500/20';
+    }
+    // Default Private
+    return 'bg-amber-500/10 border-amber-500/20 text-amber-500 hover:bg-amber-500/20';
   };
-
-  const [mockConnected, setMockConnected] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('google_calendar_connected') === 'true';
-    }
-    return false;
-  });
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('connected') === 'true' || params.get('google_connected') === 'true') {
-      localStorage.setItem('google_calendar_connected', 'true');
-      setMockConnected(true);
-      // Clean query params from URL without reload
-      const newUrl = window.location.pathname + window.location.search.replace(/[?&]connected=true/, '').replace(/[?&]google_connected=true/, '');
-      window.history.replaceState(null, '', newUrl);
-    }
-  }, []);
-
-  const googleAccount = connectedAccounts.find(a => a.service === 'google_calendar');
-  const isGoogleConnected = !!googleAccount || mockConnected;
 
   return (
     <div className="flex flex-col h-full bg-surface">
@@ -347,7 +268,7 @@ export function CalendarView() {
             Scheduling & Calendar
           </h1>
           <p className="text-sm text-on-surface-variant mt-1">
-            Personal scheduling, company events, and holidays synchronized in one view.
+            Personal scheduling, team events, and holidays synchronized in one view.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -376,32 +297,6 @@ export function CalendarView() {
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
-          
-          {isGoogleConnected ? (
-            <div className="flex items-center gap-2">
-              <span className="text-xs bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-2 rounded-lg flex items-center gap-1.5 font-medium">
-                <Check className="w-4 h-4 text-emerald-400" />
-                Connected
-              </span>
-              {isGoogleOAuthEnabled && (
-                <button
-                  onClick={handleSync}
-                  disabled={syncing}
-                  className="px-4 py-2 bg-primary hover:bg-primary/90 text-on-primary rounded text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-                  Sync
-                </button>
-              )}
-            </div>
-          ) : isGoogleOAuthEnabled ? (
-            <button
-              onClick={handleConnect}
-              className="px-4 py-2 border border-outline hover:bg-surface-container rounded text-sm font-medium text-on-surface transition-colors"
-            >
-              Connect Google Calendar
-            </button>
-          ) : null}
 
           {profile?.role !== 'viewer' && (
             <button
@@ -459,16 +354,20 @@ export function CalendarView() {
               
               <div className="flex items-center gap-4 text-xs font-medium text-on-surface-variant">
                 <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded bg-sky-500/20 border border-sky-500/30" />
-                  Personal Meetings
+                  <span className="w-2.5 h-2.5 rounded bg-amber-500/20 border border-amber-500/30" />
+                  Private Meetings
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded bg-purple-500/20 border border-purple-500/30" />
-                  Company Events
+                  <span className="w-2.5 h-2.5 rounded bg-emerald-500/20 border border-emerald-500/30" />
+                  Team Events
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded bg-blue-500/20 border border-blue-500/30" />
+                  Global Events
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded bg-rose-500/20 border border-rose-500/30" />
-                  Holidays / Festivals
+                  Holidays
                 </div>
               </div>
             </div>
@@ -526,7 +425,7 @@ export function CalendarView() {
                           <button
                             key={event.id}
                             onClick={() => handleOpenModal(event)}
-                            className={`w-full text-left text-[10px] px-2 py-1 rounded border transition-all truncate block font-medium ${getEventBadgeStyle(event.sourceType)}`}
+                            className={`w-full text-left text-[10px] px-2 py-1 rounded border transition-all truncate block font-medium ${getEventBadgeStyle(event)}`}
                             title={event.summary}
                           >
                             {event.summary || '(No Title)'}
@@ -599,8 +498,8 @@ export function CalendarView() {
                   {event.sourceType && (
                     <div className="mt-3 flex justify-between items-center text-[9px] uppercase font-mono tracking-wider">
                       <span className="text-on-surface-variant">Type:</span>
-                      <span className={`px-2 py-0.5 rounded-full border ${getEventBadgeStyle(event.sourceType)}`}>
-                        {event.sourceType}
+                      <span className={`px-2 py-0.5 rounded-full border ${getEventBadgeStyle(event)}`}>
+                        {event.visibility || 'Private'}
                       </span>
                     </div>
                   )}
@@ -659,6 +558,40 @@ export function CalendarView() {
                   />
                 </div>
               </div>
+
+              <div>
+                <label className="block text-xs uppercase font-mono text-on-surface-variant mb-1">Visibility</label>
+                <select 
+                  value={formData.visibility}
+                  onChange={e => setFormData({...formData, visibility: e.target.value as any})}
+                  className="w-full bg-surface border border-outline-variant rounded-lg p-2.5 text-on-surface focus:border-primary outline-none"
+                >
+                  <option value="private">Private (Only You)</option>
+                  {(profile?.role === 'admin' || profile?.role === 'super_admin') && (
+                    <option value="global">Global (All Users)</option>
+                  )}
+                  {(profile?.role === 'pm' || profile?.role === 'admin' || profile?.role === 'super_admin') && (
+                    <option value="team">Team (Specific Team)</option>
+                  )}
+                </select>
+              </div>
+
+              {formData.visibility === 'team' && (
+                <div>
+                  <label className="block text-xs uppercase font-mono text-on-surface-variant mb-1">Team</label>
+                  <select 
+                    value={formData.team_id}
+                    onChange={e => setFormData({...formData, team_id: e.target.value})}
+                    className="w-full bg-surface border border-outline-variant rounded-lg p-2.5 text-on-surface focus:border-primary outline-none"
+                    required={formData.visibility === 'team'}
+                  >
+                    <option value="">Select a team...</option>
+                    {teams?.map((t: any) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               
               <div>
                 <label className="block text-xs uppercase font-mono text-on-surface-variant mb-1">Description (Optional)</label>

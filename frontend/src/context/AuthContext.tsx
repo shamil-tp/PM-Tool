@@ -161,6 +161,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (data) {
           const profileWithDesignation = rowToProfile(data as Record<string, unknown>);
+          
+          // Fix for the infinite loop: Update localStorage so hard reloads don't read stale state
+          const currentUserStr = localStorage.getItem('local_user');
+          if (currentUserStr) {
+            try {
+              const currentUser = JSON.parse(currentUserStr);
+              localStorage.setItem('local_user', JSON.stringify({
+                ...currentUser,
+                ...profileWithDesignation
+              }));
+            } catch (e) {}
+          }
+          
           setProfile(profileWithDesignation);
           lastSyncedUserIdRef.current = authUser.id;
           setProfileResolved(true);

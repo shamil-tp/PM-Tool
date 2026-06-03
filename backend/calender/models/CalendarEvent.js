@@ -17,7 +17,9 @@ const calendarEventSchema = new mongoose.Schema({
     source_id: { type: String },
     source_table: { type: String },
     deleted_at: { type: Date, default: null },
-    google_event_id: { type: String } // To map the event with google calendar
+    visibility: { type: String, enum: ['private', 'global', 'team'], default: 'private' },
+    owner_id: { type: String, required: true },
+    team_id: { type: String }
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
 // Ensure we output id instead of _id to match Supabase

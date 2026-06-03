@@ -78,14 +78,21 @@ function parseQueryParams(query) {
     let params = [];
     let orderClause = '';
     let limitClause = '';
+    let offsetClause = '';
     let paramIndex = 1;
 
     for (let key in query) {
         if (key === 'order') {
-            const [col, dir] = query[key].split('.');
-            orderClause = `ORDER BY "${col}" ${dir.toUpperCase() === 'DESC' ? 'DESC' : 'ASC'}`;
+            const orders = Array.isArray(query[key]) ? query[key] : [query[key]];
+            const orderParts = orders.map(o => {
+                const [col, dir] = o.split('.');
+                return `"${col}" ${dir && dir.toUpperCase() === 'DESC' ? 'DESC' : 'ASC'}`;
+            });
+            orderClause = `ORDER BY ${orderParts.join(', ')}`;
         } else if (key === 'limit') {
             limitClause = `LIMIT ${parseInt(query[key])}`;
+        } else if (key === 'offset') {
+            offsetClause = `OFFSET ${parseInt(query[key])}`;
         } else if (key === 'or') {
             let val = query[key];
             if (val.startsWith('(') && val.endsWith(')')) {
@@ -112,7 +119,7 @@ function parseQueryParams(query) {
             paramIndex = res.newIndex;
         }
     }
-    return { whereClauses, params, orderClause, limitClause };
+    return { whereClauses, params, orderClause, limitClause, offsetClause };
 }
 
 router.get('/:table', async (req, res) => {
@@ -120,13 +127,14 @@ router.get('/:table', async (req, res) => {
     if (!/^[a-z0-9_]+$/.test(table)) return res.status(400).json({error: "Invalid table"});
     
     try {
-        const { whereClauses, params, orderClause, limitClause } = parseQueryParams(req.query);
+        const { whereClauses, params, orderClause, limitClause, offsetClause } = parseQueryParams(req.query);
         let query = `SELECT * FROM public."${table}"`;
         if (whereClauses.length > 0) {
             query += ` WHERE ` + whereClauses.join(' AND ');
         }
         if (orderClause) query += ` ${orderClause}`;
         if (limitClause) query += ` ${limitClause}`;
+        if (offsetClause) query += ` ${offsetClause}`;
 
         const result = await db.query(query, params);
         res.json(result.rows);

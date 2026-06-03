@@ -198,6 +198,9 @@ export interface CalendarEvent {
   capacity_modifier?: number;
   source_id?: string;
   source_table?: string;
+  visibility?: 'private' | 'global' | 'team';
+  team_id?: string;
+  owner_id?: string;
   created_at: string;
   updated_at: string;
 }

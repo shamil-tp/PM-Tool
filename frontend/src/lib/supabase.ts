@@ -79,6 +79,59 @@ class QueryBuilder {
     return this;
   }
 
+  or(condition) {
+    this.url.searchParams.append('or', `(${condition})`);
+    return this;
+  }
+
+  is(column, value) {
+    this.url.searchParams.append(column, `is.${value}`);
+    return this;
+  }
+
+  ilike(column, value) {
+    this.url.searchParams.append(column, `ilike.${value}`);
+    return this;
+  }
+
+  gte(column, value) {
+    this.url.searchParams.append(column, `gte.${value}`);
+    return this;
+  }
+
+  lte(column, value) {
+    this.url.searchParams.append(column, `lte.${value}`);
+    return this;
+  }
+
+  gt(column, value) {
+    this.url.searchParams.append(column, `gt.${value}`);
+    return this;
+  }
+
+  lt(column, value) {
+    this.url.searchParams.append(column, `lt.${value}`);
+    return this;
+  }
+
+  like(column, value) {
+    this.url.searchParams.append(column, `like.${value}`);
+    return this;
+  }
+
+  range(from, to) {
+    this.url.searchParams.append('offset', from);
+    this.url.searchParams.append('limit', to - from + 1);
+    return this;
+  }
+
+  match(query) {
+    for (const [key, value] of Object.entries(query)) {
+      this.eq(key, value);
+    }
+    return this;
+  }
+
   maybeSingle() {
     this.isSingle = true;
     return this;
@@ -155,6 +208,11 @@ class SupabaseClientMock {
 
   from(table) {
     return new QueryBuilder(table);
+  }
+
+  rpc(name, params) {
+    // Return mock data for any RPC call since the local backend doesn't support custom stored procedures
+    return Promise.resolve({ data: {}, error: null });
   }
 
   channel(name) {
