@@ -33,35 +33,63 @@ The application relies on environment variables for configuration. You need to s
 
 ### 2.1 Root Environment Variables (Backend & Databases)
 
-In the root of the `pm-tool` directory, copy the example environment file:
+You can quickly generate your root `.env` file directly from the command line by substituting your actual values (like your IP address and secrets) into the commands below.
 
+**For macOS / Linux (Bash):**
 ```bash
-cp .env.example .env
+cat <<EOF > .env
+VITE_CALENDAR_API_URL=http://your-server-ip:5001
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+REDIRECT_URI=http://your-server-ip:5001/api/calendar/oauth2callback
+JWT_SECRET=your-secure-random-string
+POSTGRES_PASSWORD=your-secure-db-password
+DB=mongodb://mongodb:27017/pm-tool
+EOF
 ```
 
-**Open the new `.env` file** in your favorite text editor and fill in the required values:
-- `VITE_CALENDAR_API_URL`: The URL where your Calendar API will be accessible (e.g., `http://localhost:5001` or `http://your-server-ip:5001`).
-- `GOOGLE_CLIENT_ID` & `GOOGLE_CLIENT_SECRET`: Your Google OAuth credentials.
-- `REDIRECT_URI`: Must match the Calendar API URL path (e.g., `http://localhost:5001/api/calendar/oauth2callback`).
-- `JWT_SECRET`: A long, secure random string for signing tokens.
-- `POSTGRES_PASSWORD`: A secure password for the PostgreSQL database.
+**For Windows (PowerShell):**
+```powershell
+Set-Content -Path .env -Value @"
+VITE_CALENDAR_API_URL=http://your-server-ip:5001
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+REDIRECT_URI=http://your-server-ip:5001/api/calendar/oauth2callback
+JWT_SECRET=your-secure-random-string
+POSTGRES_PASSWORD=your-secure-db-password
+DB=mongodb://mongodb:27017/pm-tool
+"@
+```
+*(Alternatively, you can manually copy `.env.example` to `.env` and edit it using your favorite text editor.)*
 
 ### 2.2 Frontend Environment Variables
 
 The React frontend (built with Vite) requires its own environment variables baked in at build time.
 
-Navigate to the `frontend` directory and copy the example file:
+Navigate to the `frontend` directory and create the `.env` file using your terminal.
 
+**For macOS / Linux (Bash):**
 ```bash
 cd frontend
-cp .env.example .env
+cat <<EOF > .env
+GEMINI_API_KEY="YOUR_GEMINI_API_KEY"
+VITE_PRODUCT_KEY_API_URL="http://your-server-ip:5002"
+VITE_CALENDAR_API_URL="http://your-server-ip:5001"
+EOF
 cd ..
 ```
 
-**Open `frontend/.env`** and configure:
-- `GEMINI_API_KEY`: Your Gemini AI API key (required for AI features).
-- `VITE_PRODUCT_KEY_API_URL`: The URL for the product key backend (e.g., `http://localhost:5002` if running locally, note that the internal port 5000 is mapped to 5002 on the host).
-- `VITE_CALENDAR_API_URL`: Should match the Calendar API URL you set in the root `.env` file.
+**For Windows (PowerShell):**
+```powershell
+cd frontend
+Set-Content -Path .env -Value @"
+GEMINI_API_KEY="YOUR_GEMINI_API_KEY"
+VITE_PRODUCT_KEY_API_URL="http://your-server-ip:5002"
+VITE_CALENDAR_API_URL="http://your-server-ip:5001"
+"@
+cd ..
+```
+*(Alternatively, you can manually copy `frontend/.env.example` to `frontend/.env` and edit it.)*
 
 > **⚠️ CRITICAL WARNING:** Because the frontend is a statically built React application, **any changes to `frontend/.env` require a complete rebuild of the frontend container** for the changes to take effect.
 
