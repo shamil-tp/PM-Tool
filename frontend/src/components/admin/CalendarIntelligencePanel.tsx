@@ -33,6 +33,7 @@ export function CalendarIntelligencePanel() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newEvent, setNewEvent] = useState({ title: '', start_date: '', end_date: '', event_type: 'company' as const, capacity_impact: 1, description: '' });
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
+  const [isGoogleOAuthEnabled, setIsGoogleOAuthEnabled] = useState(true);
 
   const loadData = async () => {
     if (!workspace?.id) return;
@@ -42,6 +43,11 @@ export function CalendarIntelligencePanel() {
     ]);
     setEvents(evts);
     setSyncLogs(logs);
+    try {
+      const { calendarService } = await import('../../services/calendarService');
+      const config = await calendarService.getConfig();
+      setIsGoogleOAuthEnabled(config.googleOAuthEnabled);
+    } catch (e) {}
   };
 
   useEffect(() => {
@@ -126,16 +132,18 @@ export function CalendarIntelligencePanel() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={async () => {
-              const { data: { session } } = await supabase.auth.getSession();
-              const token = session?.access_token;
-              window.open(`${import.meta.env.VITE_CALENDAR_API_URL}/auth/google?token=${token}`, '_blank', 'width=600,height=700');
-            }}
-            className="px-4 py-2 bg-[#4285F4] hover:bg-[#3367D6] text-[var(--pm-text)] dark:text-white rounded-lg text-[12px] font-semibold shadow-sm transition-all flex items-center gap-2"
-          >
-            <CalendarDays className="w-4 h-4" /> Connect Google Calendar
-          </button>
+          {isGoogleOAuthEnabled && (
+            <button
+              onClick={async () => {
+                const { data: { session } } = await supabase.auth.getSession();
+                const token = session?.access_token;
+                window.open(`${import.meta.env.VITE_CALENDAR_API_URL}/auth/google?token=${token}`, '_blank', 'width=600,height=700');
+              }}
+              className="px-4 py-2 bg-[#4285F4] hover:bg-[#3367D6] text-[var(--pm-text)] dark:text-white rounded-lg text-[12px] font-semibold shadow-sm transition-all flex items-center gap-2"
+            >
+              <CalendarDays className="w-4 h-4" /> Connect Google Calendar
+            </button>
+          )}
           {canManageCalendar && (
             <button 
               onClick={() => setShowCreateForm(true)} 

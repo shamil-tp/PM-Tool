@@ -57,6 +57,20 @@ export const calendarService = {
     return `${CALENDAR_API_URL}/auth/google${token ? `?token=${token}` : ''}`;
   },
 
+  async getConfig(): Promise<{ googleOAuthEnabled: boolean }> {
+    try {
+      const response = await fetch(`${CALENDAR_API_URL}/config`, {
+        headers: getHeaders()
+      });
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch (e) {
+      console.warn('[calendarService] getConfig failed:', e);
+    }
+    return { googleOAuthEnabled: true }; // default true
+  },
+
   async getEvents(workspaceId: string, startDate: string, endDate: string): Promise<CalendarEvent[]> {
     try {
       const { calendarEventService } = await import('./calendarEventService');

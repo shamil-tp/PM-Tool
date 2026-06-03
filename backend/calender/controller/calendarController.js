@@ -6,11 +6,23 @@ const CalendarSyncLog = require('../models/CalendarSyncLog');
 const client_id = process.env.GOOGLE_CLIENT_ID;
 const client_secret = process.env.GOOGLE_CLIENT_SECRET;
 const redirectUri = process.env.REDIRECT_URI || 'http://localhost:5001/api/calendar/oauth2callback';
-const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirectUri);
+
+const isGoogleOAuthEnabled = 
+    process.env.ENABLE_GOOGLE_OAUTH !== 'false' && 
+    Boolean(process.env.GOOGLE_CLIENT_ID) && 
+    Boolean(process.env.GOOGLE_CLIENT_SECRET);
+
+let oAuth2Client = null;
+if (isGoogleOAuthEnabled) {
+    oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirectUri);
+}
 
 const SCOPES = ['https://www.googleapis.com/auth/calendar.app.created'];
 
 exports.googleAuth = async (req, res) => {
+    if (!isGoogleOAuthEnabled) {
+        return res.status(400).json({ success: false, message: "Google OAuth integration is disabled on this server." });
+    }
     const authUrl = oAuth2Client.generateAuthUrl({
         access_type: 'offline',
         prompt: 'consent',
@@ -21,6 +33,10 @@ exports.googleAuth = async (req, res) => {
 };
 
 exports.googleAuthCallback = async (req, res) => {
+    if (!isGoogleOAuthEnabled) {
+        return res.status(400).json({ success: false, message: "Google OAuth integration is disabled on this server." });
+    }
+
     const code = req.query.code;
     const userId = req.query.state;
     if (!code || !userId) {
@@ -116,6 +132,7 @@ exports.googleAuthCallback = async (req, res) => {
 };
 
 const getOAuthClientForUser = async (userId) => {
+    if (!isGoogleOAuthEnabled) return { client: null, googleCalendarId: null };
     if (!userId) return { client: null, googleCalendarId: null };
     const integration = await UserIntegration.findOne({ userId });
     if (!integration || !integration.googleRefreshToken || !integration.googleCalendarId) return { client: null, googleCalendarId: null };
@@ -360,4 +377,8 @@ exports.appendSyncLog = async (req, res) => {
         console.error('appendSyncLog Error:', error);
         res.status(500).json({ error: error.message || 'Failed to append sync log' });
     }
+};
+
+exports.getConfig = async (req, res) => {
+    res.json({ googleOAuthEnabled: isGoogleOAuthEnabled });
 };

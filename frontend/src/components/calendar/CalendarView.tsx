@@ -25,6 +25,7 @@ export function CalendarView() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
+  const [isGoogleOAuthEnabled, setIsGoogleOAuthEnabled] = useState(true);
   
   // View states
   const [viewMode, setViewMode] = useState<'month' | 'list'>('month');
@@ -79,10 +80,20 @@ export function CalendarView() {
     }
   };
 
+  const fetchConfig = async () => {
+    try {
+      const config = await calendarService.getConfig();
+      setIsGoogleOAuthEnabled(config.googleOAuthEnabled);
+    } catch (e) {
+      console.warn("Failed to fetch calendar config:", e);
+    }
+  };
+
   useEffect(() => {
     if (workspace?.id) {
       fetchEvents();
       fetchAccounts();
+      fetchConfig();
     }
   }, [workspace?.id]);
 
@@ -372,23 +383,25 @@ export function CalendarView() {
                 <Check className="w-4 h-4 text-emerald-400" />
                 Connected
               </span>
-              <button
-                onClick={handleSync}
-                disabled={syncing}
-                className="px-4 py-2 bg-primary hover:bg-primary/90 text-on-primary rounded text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-                Sync
-              </button>
+              {isGoogleOAuthEnabled && (
+                <button
+                  onClick={handleSync}
+                  disabled={syncing}
+                  className="px-4 py-2 bg-primary hover:bg-primary/90 text-on-primary rounded text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+                  Sync
+                </button>
+              )}
             </div>
-          ) : (
+          ) : isGoogleOAuthEnabled ? (
             <button
               onClick={handleConnect}
               className="px-4 py-2 border border-outline hover:bg-surface-container rounded text-sm font-medium text-on-surface transition-colors"
             >
               Connect Google Calendar
             </button>
-          )}
+          ) : null}
 
           {profile?.role !== 'viewer' && (
             <button

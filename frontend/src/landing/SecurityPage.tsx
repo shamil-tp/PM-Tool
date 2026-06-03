@@ -21,7 +21,7 @@ export function SecurityPage() {
         <section className="space-y-4">
           <h2 className="text-xl font-semibold">Encryption in Transit</h2>
           <p className="text-on-surface-variant leading-relaxed">
-            All data moving between your browser, our Vercel-hosted infrastructure, and Google APIs is encrypted using industry-standard TLS.
+            All data moving between your browser, our Vercel-hosted infrastructure{import.meta.env.VITE_ENABLE_GOOGLE_OAUTH !== 'false' && ', and Google APIs'} is encrypted using industry-standard TLS.
           </p>
         </section>
 
@@ -32,12 +32,14 @@ export function SecurityPage() {
           </p>
         </section>
 
-        <section className="space-y-4">
-          <h2 className="text-xl font-semibold">OAuth Protection</h2>
-          <p className="text-on-surface-variant leading-relaxed">
-            We never store your Google password. Access is managed through secure OAuth 2.0 tokens which can be revoked by the user at any time.
-          </p>
-        </section>
+        {import.meta.env.VITE_ENABLE_GOOGLE_OAUTH !== 'false' && (
+          <section className="space-y-4">
+            <h2 className="text-xl font-semibold">OAuth Protection</h2>
+            <p className="text-on-surface-variant leading-relaxed">
+              We never store your Google password. Access is managed through secure OAuth 2.0 tokens which can be revoked by the user at any time.
+            </p>
+          </section>
+        )}
 
         <section className="space-y-4">
           <h2 className="text-xl font-semibold">Minimalist Data Retention</h2>

@@ -5,6 +5,8 @@ const authMiddleware = require('../middleware/auth');
 
 router.use(authMiddleware);
 
+router.get('/config', calendarController.getConfig);
+
 router.get('/auth/google', calendarController.googleAuth);
 router.get('/oauth2callback', calendarController.googleAuthCallback);
 router.get('/events', calendarController.getEventsInRange);
