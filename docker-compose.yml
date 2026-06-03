@@ -5,8 +5,6 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-        - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
         - VITE_CALENDAR_API_URL=${VITE_CALENDAR_API_URL}
     ports:
       - "3077:80"
@@ -28,6 +26,9 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - REDIRECT_URI=${REDIRECT_URI}
       - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      mongodb:
+        condition: service_healthy
     restart: unless-stopped
 
   product-key-backend:
@@ -43,6 +44,9 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - REDIRECT_URI=${REDIRECT_URI}
       - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      mongodb:
+        condition: service_healthy
     restart: unless-stopped
 
   core-backend:
@@ -53,11 +57,12 @@ services:
       - "5003:5003"
     environment:
       - PORT=5003
-      - DATABASE_URL=postgresql://postgres:mysecretpassword@postgresql:5432/pm-tool
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-mysecretpassword}@postgresql:5432/pm-tool
       - JWT_SECRET=${JWT_SECRET}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
     depends_on:
-      - postgresql
+      postgresql:
+        condition: service_healthy
     restart: unless-stopped
 
   mongodb:
@@ -66,9 +71,13 @@ services:
       - "27017:27017"
     volumes:
       - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     restart: unless-stopped
-    # If you ever want the backends to use this local MongoDB instead of your Atlas URL,
-    # change their DB variable to: DB=mongodb://mongodb:27017/pm-tool
 
   postgresql:
     image: postgres:15
@@ -76,11 +85,17 @@ services:
       - "5432:5432"
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: mysecretpassword
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mysecretpassword}
       POSTGRES_DB: pm-tool
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d pm-tool"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     restart: unless-stopped
 
 volumes:

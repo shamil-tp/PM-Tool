@@ -21,7 +21,8 @@ services:
       - REDIRECT_URI=${REDIRECT_URI}
       - JWT_SECRET=${JWT_SECRET}
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
     restart: unless-stopped
 
   product-key-backend:
@@ -36,7 +37,8 @@ services:
       - REDIRECT_URI=${REDIRECT_URI}
       - JWT_SECRET=${JWT_SECRET}
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
     restart: unless-stopped
 
   core-backend:
@@ -45,11 +47,12 @@ services:
       - "5003:5003"
     environment:
       - PORT=5003
-      - DATABASE_URL=postgresql://postgres:mysecretpassword@postgresql:5432/pm-tool
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-mysecretpassword}@postgresql:5432/pm-tool
       - JWT_SECRET=${JWT_SECRET}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
     depends_on:
-      - postgresql
+      postgresql:
+        condition: service_healthy
     restart: unless-stopped
 
   mongodb:
@@ -58,6 +61,12 @@ services:
       - "27017:27017"
     volumes:
       - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     restart: unless-stopped
 
   postgresql:
@@ -66,11 +75,17 @@ services:
       - "5432:5432"
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: mysecretpassword
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mysecretpassword}
       POSTGRES_DB: pm-tool
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d pm-tool"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     restart: unless-stopped
 
 volumes:

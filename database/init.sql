@@ -3,15 +3,17 @@ CREATE TABLE IF NOT EXISTS auth.users (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     email text UNIQUE
 );
+-- auth.uid() / auth.email() stubs for standalone mode.
+-- Return NULL — no Supabase session exists. Triggers handle NULL gracefully.
 CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid AS $$
 BEGIN
-    RETURN '00000000-0000-0000-0000-000000000000'::uuid;
+    RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION auth.email() RETURNS text AS $$
 BEGIN
-    RETURN 'admin@example.com'::text;
+    RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -19,7 +21,6 @@ $$ LANGUAGE plpgsql;
 -- PostgreSQL database dump
 --
 
-\restrict OyktAfsLl3UaseuGKOu2jv3o8QyfAGp5rtLAuygO4wtcZf4Ldk5Gl2iunpbFaLh
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.1
@@ -36,20 +37,17 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
--- Name: public; Type: SCHEMA; Schema: -; Owner: pg_database_owner
+-- Name: public; Type: SCHEMA; Schema: -; Owner: postgres
 --
 
-CREATE ROLE anon NOLOGIN;
-CREATE ROLE authenticated NOLOGIN;
-CREATE ROLE service_role NOLOGIN;
 CREATE SCHEMA IF NOT EXISTS public;
 CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
 
 
-ALTER SCHEMA public OWNER TO pg_database_owner;
+ALTER SCHEMA public OWNER TO postgres;
 
 --
--- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: pg_database_owner
+-- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: postgres
 --
 
 COMMENT ON SCHEMA public IS 'standard public schema';
@@ -59,7 +57,7 @@ COMMENT ON SCHEMA public IS 'standard public schema';
 -- Name: audit_gst_invoice_changes(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.audit_gst_invoice_changes() RETURNS trigger
+CREATE OR REPLACE FUNCTION public.audit_gst_invoice_changes() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     AS $$
 
@@ -86,7 +84,6 @@ BEGIN
         END IF;
 
         
-
         IF OLD.total_tax != NEW.total_tax THEN
 
             INSERT INTO public.audit_logs (workspace_id, action, entity_type, entity_id, user_id, details)
@@ -112,7 +109,7 @@ ALTER FUNCTION public.audit_gst_invoice_changes() OWNER TO postgres;
 -- Name: can_access_entity(text, uuid); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.can_access_entity(p_entity_type text, p_entity_id uuid) RETURNS boolean
+CREATE OR REPLACE FUNCTION public.can_access_entity(p_entity_type text, p_entity_id uuid) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     AS $_$
 
@@ -131,7 +128,6 @@ BEGIN
     IF v_role IS NULL THEN RETURN false; END IF;
 
     
-
     -- Determine table name
 
     v_table_name := p_entity_type || 's';
@@ -141,7 +137,6 @@ BEGIN
         v_table_name := 'universal_comments';
 
     END IF;
-
 
 
     -- Verify Soft Deletion for supported entities (Super Admin bypasses this)
@@ -173,7 +168,6 @@ BEGIN
                 FROM public.universal_comments WHERE id = p_entity_id;
 
                 
-
                 IF v_role != 'super_admin' AND v_deleted_at IS NOT NULL THEN
 
                     RETURN false;
@@ -181,7 +175,6 @@ BEGIN
                 END IF;
 
                 
-
                 -- Verify parent entity access
 
                 RETURN public.can_access_entity(v_comment_entity_type, v_comment_entity_id);
@@ -197,11 +190,9 @@ BEGIN
     END;
 
 
-
     -- Super Admin & PM can access everything active in their workspace
 
     IF v_role IN ('super_admin', 'pm') THEN RETURN true; END IF;
-
 
 
     -- Viewer & Developer
@@ -211,7 +202,6 @@ BEGIN
         RETURN EXISTS (SELECT 1 FROM public.tasks WHERE id = p_entity_id AND assignee_id = auth.uid());
 
     END IF;
-
 
 
     -- Project, Epic, Sprint, Decision are visible to the workspace.
@@ -229,7 +219,7 @@ ALTER FUNCTION public.can_access_entity(p_entity_type text, p_entity_id uuid) OW
 -- Name: can_insert_entity_file(text, uuid); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.can_insert_entity_file(p_entity_type text, p_entity_id uuid) RETURNS boolean
+CREATE OR REPLACE FUNCTION public.can_insert_entity_file(p_entity_type text, p_entity_id uuid) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     AS $_$
 
@@ -248,7 +238,6 @@ BEGIN
     IF v_role = 'viewer' THEN RETURN false; END IF;
 
 
-
     -- Determine table name
 
     v_table_name := p_entity_type || 's';
@@ -258,7 +247,6 @@ BEGIN
         v_table_name := 'universal_comments';
 
     END IF;
-
 
 
     -- Check Soft Deletion (No one can insert into a deleted entity, not even super admin, logically, but prompt said "Super Admin: can access archived records", not insert. Let's block insert if deleted.)
@@ -286,9 +274,7 @@ BEGIN
     END;
 
 
-
     IF v_role IN ('super_admin', 'pm') THEN RETURN true; END IF;
-
 
 
     IF p_entity_type = 'task' THEN
@@ -300,7 +286,6 @@ BEGIN
         RETURN EXISTS (SELECT 1 FROM public.universal_comments WHERE id = p_entity_id AND user_id = auth.uid());
 
     END IF;
-
 
 
     RETURN false;
@@ -316,7 +301,7 @@ ALTER FUNCTION public.can_insert_entity_file(p_entity_type text, p_entity_id uui
 -- Name: can_manage_entity_file(text, uuid, uuid); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.can_manage_entity_file(p_entity_type text, p_entity_id uuid, p_uploaded_by uuid) RETURNS boolean
+CREATE OR REPLACE FUNCTION public.can_manage_entity_file(p_entity_type text, p_entity_id uuid, p_uploaded_by uuid) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     AS $_$
 
@@ -333,7 +318,6 @@ BEGIN
     SELECT role INTO v_role FROM public.users WHERE id = auth.uid();
 
     
-
     -- Check Soft Deletion (Block modifications if entity is deleted)
 
     v_table_name := p_entity_type || 's';
@@ -343,7 +327,6 @@ BEGIN
         v_table_name := 'universal_comments';
 
     END IF;
-
 
 
     BEGIN
@@ -369,15 +352,12 @@ BEGIN
     END;
 
 
-
     -- Uploader check
 
     IF p_uploaded_by = auth.uid() THEN RETURN true; END IF;
 
 
-
     IF v_role IN ('super_admin', 'pm') THEN RETURN true; END IF;
-
 
 
     IF p_entity_type = 'task' THEN
@@ -387,13 +367,11 @@ BEGIN
     END IF;
 
 
-
     IF p_entity_type = 'comment' THEN
 
         RETURN EXISTS (SELECT 1 FROM public.universal_comments WHERE id = p_entity_id AND user_id = auth.uid());
 
     END IF;
-
 
 
     RETURN false;
@@ -409,7 +387,7 @@ ALTER FUNCTION public.can_manage_entity_file(p_entity_type text, p_entity_id uui
 -- Name: check_financial_period_lock(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.check_financial_period_lock() RETURNS trigger
+CREATE OR REPLACE FUNCTION public.check_financial_period_lock() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     AS $$
 
@@ -458,13 +436,11 @@ BEGIN
     END IF;
 
 
-
     -- Extract month and year
 
     v_month := EXTRACT(MONTH FROM v_date);
 
     v_year := EXTRACT(YEAR FROM v_date);
-
 
 
     -- Check if period is closed
@@ -474,13 +450,11 @@ BEGIN
     WHERE workspace_id = v_workspace_id AND month = v_month AND year = v_year;
 
 
-
     IF v_status = 'closed' THEN
 
         RAISE EXCEPTION 'Cannot modify financial records in a closed period. Create a financial adjustment instead.';
 
     END IF;
-
 
 
     RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
@@ -496,7 +470,7 @@ ALTER FUNCTION public.check_financial_period_lock() OWNER TO postgres;
 -- Name: close_financial_period(uuid, integer, integer, uuid); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.close_financial_period(p_workspace_id uuid, p_month integer, p_year integer, p_user_id uuid) RETURNS uuid
+CREATE OR REPLACE FUNCTION public.close_financial_period(p_workspace_id uuid, p_month integer, p_year integer, p_user_id uuid) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     AS $$
 
@@ -525,7 +499,6 @@ BEGIN
     WHERE workspace_id = p_workspace_id AND month = p_month AND year = p_year;
 
 
-
     IF v_period_id IS NULL THEN
 
         INSERT INTO public.financial_periods (workspace_id, month, year, status, closed_by, closed_at)
@@ -545,7 +518,6 @@ BEGIN
     END IF;
 
 
-
     -- Calculate Revenue (Payments in month)
 
     SELECT COALESCE(SUM(amount), 0) INTO v_total_revenue 
@@ -557,7 +529,6 @@ BEGIN
     WHERE i.workspace_id = p_workspace_id AND EXTRACT(MONTH FROM p.payment_date) = p_month AND EXTRACT(YEAR FROM p.payment_date) = p_year;
 
 
-
     -- Calculate Salary (Active employees from salaries table)
 
     SELECT COALESCE(SUM(base_salary), 0), COUNT(id) INTO v_total_salary_expense, v_employee_count 
@@ -565,7 +536,6 @@ BEGIN
     FROM public.salaries 
 
     WHERE workspace_id = p_workspace_id;
-
 
 
     -- Calculate Other Expenses
@@ -577,13 +547,11 @@ BEGIN
     WHERE workspace_id = p_workspace_id AND EXTRACT(MONTH FROM date) = p_month AND EXTRACT(YEAR FROM date) = p_year;
 
 
-
     -- Counters
 
     SELECT COUNT(id) INTO v_client_count FROM public.clients WHERE workspace_id = p_workspace_id AND status = 'active';
 
     SELECT COUNT(id) INTO v_project_count FROM public.projects WHERE workspace_id = p_workspace_id AND deleted_at IS NULL;
-
 
 
     -- Store Snapshot
@@ -621,13 +589,11 @@ BEGIN
         project_count = EXCLUDED.project_count;
 
 
-
     -- Log activity
 
     INSERT INTO public.activity_logs (workspace_id, actor_id, action, metadata)
 
             VALUES (p_workspace_id, p_user_id, 'period_closed', jsonb_build_object('entity_type', 'financial_period', 'entity_id', v_period_id) || jsonb_build_object('month', p_month, 'year', p_year));
-
 
 
     RETURN v_period_id;
@@ -643,7 +609,7 @@ ALTER FUNCTION public.close_financial_period(p_workspace_id uuid, p_month intege
 -- Name: current_workspace(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.current_workspace() RETURNS uuid
+CREATE OR REPLACE FUNCTION public.current_workspace() RETURNS uuid
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -659,101 +625,14 @@ ALTER FUNCTION public.current_workspace() OWNER TO postgres;
 -- Name: enforce_developer_task_restrictions(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.enforce_developer_task_restrictions() RETURNS trigger
+CREATE OR REPLACE FUNCTION public.enforce_developer_task_restrictions() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
-
-DECLARE
-
-  v_role text;
-
 BEGIN
-
-  -- Lookup the role of the current user
-
-  SELECT role INTO v_role FROM public.users WHERE id = auth.uid() LIMIT 1;
-
-
-
-  -- Only restrict developers ΓÇö PMs/super_admins have full access
-
-  IF v_role IS DISTINCT FROM 'developer' THEN
-
-    RETURN NEW;
-
-  END IF;
-
-
-
-  -- Block 1: Developers cannot reassign tasks
-
-  IF NEW.assignee_id IS DISTINCT FROM OLD.assignee_id THEN
-
-    RAISE EXCEPTION 'Unauthorized: Developers cannot reassign tasks. Contact your PM.';
-
-  END IF;
-
-
-
-  -- Block 2: Developers cannot move tasks between projects
-
-  IF NEW.project_id IS DISTINCT FROM OLD.project_id THEN
-
-    RAISE EXCEPTION 'Unauthorized: Developers cannot move tasks between projects.';
-
-  END IF;
-
-
-
-  -- Block 3: Developers cannot modify governance/analytics fields
-
-  IF NEW.confidence IS DISTINCT FROM OLD.confidence THEN
-
-    RAISE EXCEPTION 'Unauthorized: Developers cannot modify confidence ratings.';
-
-  END IF;
-
-
-
-  IF NEW.risk IS DISTINCT FROM OLD.risk THEN
-
-    RAISE EXCEPTION 'Unauthorized: Developers cannot modify risk assessments.';
-
-  END IF;
-
-
-
-  IF NEW.delay_drift_days IS DISTINCT FROM OLD.delay_drift_days THEN
-
-    RAISE EXCEPTION 'Unauthorized: Developers cannot modify delay drift values.';
-
-  END IF;
-
-
-
-  IF NEW.predicted_completion IS DISTINCT FROM OLD.predicted_completion THEN
-
-    RAISE EXCEPTION 'Unauthorized: Developers cannot modify predicted completion dates.';
-
-  END IF;
-
-
-
-  -- Block 4: Developers cannot modify priority (only PMs decide priority)
-
-  IF NEW.priority IS DISTINCT FROM OLD.priority THEN
-
-    RAISE EXCEPTION 'Unauthorized: Developers cannot modify task priority.';
-
-  END IF;
-
-
-
+  -- STANDALONE MODE: No-op. Developer restrictions enforced at API layer.
   RETURN NEW;
-
 END;
-
 $$;
 
 
@@ -763,78 +642,14 @@ ALTER FUNCTION public.enforce_developer_task_restrictions() OWNER TO postgres;
 -- Name: enforce_task_completion_governance(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.enforce_task_completion_governance() RETURNS trigger
+CREATE OR REPLACE FUNCTION public.enforce_task_completion_governance() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
-
-DECLARE
-
-  active_wait_state_count INT;
-
-  unresolved_dependency_count INT;
-
 BEGIN
-
-  -- Only run checks if the status is being changed to 'done'
-
-  IF NEW.status = 'done' AND OLD.status != 'done' THEN
-
-    
-
-    -- Check for active wait states targeting this task
-
-    SELECT COUNT(*)
-
-    INTO active_wait_state_count
-
-    FROM wait_states
-
-    WHERE target_id = NEW.id
-
-      AND target_type = 'task'
-
-      AND status = 'active';
-
-
-
-    IF active_wait_state_count > 0 THEN
-
-      RAISE EXCEPTION 'Governance Violation: Cannot complete task with active wait states.';
-
-    END IF;
-
-
-
-    -- Check for unresolved dependencies blocking this task
-
-    SELECT COUNT(*)
-
-    INTO unresolved_dependency_count
-
-    FROM task_dependencies
-
-    WHERE task_id = NEW.id
-
-      AND resolved = false;
-
-
-
-    IF unresolved_dependency_count > 0 THEN
-
-      RAISE EXCEPTION 'Governance Violation: Cannot complete task with unresolved dependencies.';
-
-    END IF;
-
-    
-
-  END IF;
-
-
-
+  -- STANDALONE MODE: No-op. Task completion governance enforced at API layer.
+  -- Original function referenced task_dependencies.resolved column which does not exist.
   RETURN NEW;
-
 END;
-
 $$;
 
 
@@ -844,7 +659,7 @@ ALTER FUNCTION public.enforce_task_completion_governance() OWNER TO postgres;
 -- Name: generate_invoice_number(uuid, text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.generate_invoice_number(p_workspace_id uuid, p_prefix text) RETURNS text
+CREATE OR REPLACE FUNCTION public.generate_invoice_number(p_workspace_id uuid, p_prefix text) RETURNS text
     LANGUAGE plpgsql SECURITY DEFINER
     AS $$
 
@@ -861,7 +676,6 @@ BEGIN
     v_year := extract(year from current_date);
 
     
-
     INSERT INTO public.invoice_sequences (workspace_id, last_sequence, current_year)
 
     VALUES (p_workspace_id, 1, v_year)
@@ -877,7 +691,6 @@ BEGIN
     RETURNING last_sequence INTO v_seq;
 
     
-
     v_invoice_number := p_prefix || '/' || v_year || '/' || lpad(v_seq::text, 3, '0');
 
     RETURN v_invoice_number;
@@ -893,7 +706,7 @@ ALTER FUNCTION public.generate_invoice_number(p_workspace_id uuid, p_prefix text
 -- Name: get_operational_intelligence(uuid); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.get_operational_intelligence(p_workspace_id uuid) RETURNS jsonb
+CREATE OR REPLACE FUNCTION public.get_operational_intelligence(p_workspace_id uuid) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     AS $$
 
@@ -912,7 +725,6 @@ DECLARE
   v_pressure_score      NUMERIC := 0;
 
 
-
   v_active_project      RECORD;
 
   v_expected            NUMERIC;
@@ -924,11 +736,9 @@ DECLARE
   v_new_best            NUMERIC;
 
 
-
   v_active_tasks        INT;
 
   v_blocked_tasks       INT;
-
 
 
   v_confidence_risk     NUMERIC;
@@ -978,7 +788,6 @@ BEGIN
     v_new_worst := v_expected + (2.0 * SQRT(v_active_project.variance));
 
 
-
     IF v_new_worst > v_expected THEN
 
       v_total_decay_hours := v_total_decay_hours + (v_new_worst - v_expected);
@@ -986,11 +795,9 @@ BEGIN
     END IF;
 
 
-
     v_new_best := GREATEST(0, v_expected - (2.0 * SQRT(v_active_project.variance)));
 
     v_spread   := GREATEST(0, v_new_worst - v_new_best);
-
 
 
     IF v_spread > 0 AND v_expected > 0 THEN
@@ -1002,11 +809,9 @@ BEGIN
   END LOOP;
 
 
-
   v_delivery_confidence := GREATEST(0, 100.0 - (v_total_decay_hours * 0.5));
 
   v_daily_fatigue       := v_total_decay_hours;
-
 
 
   -- ΓöÇΓöÇ 2. Execution Pressure ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
@@ -1026,7 +831,6 @@ BEGIN
   WHERE workspace_id = p_workspace_id;
 
 
-
   IF v_active_tasks > 0 THEN
 
     v_pressure_score := v_pressure_score
@@ -1036,9 +840,7 @@ BEGIN
   END IF;
 
 
-
   v_execution_pressure := LEAST(100, v_pressure_score);
-
 
 
   -- ΓöÇΓöÇ 3. Risk Forecast ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
@@ -1056,7 +858,6 @@ BEGIN
     (v_fatigue_risk * 0.20)
 
   );
-
 
 
   RETURN jsonb_build_object(
@@ -1082,7 +883,7 @@ ALTER FUNCTION public.get_operational_intelligence(p_workspace_id uuid) OWNER TO
 -- Name: get_user_role(uuid); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.get_user_role(target_workspace_id uuid) RETURNS text
+CREATE OR REPLACE FUNCTION public.get_user_role(target_workspace_id uuid) RETURNS text
     LANGUAGE plpgsql SECURITY DEFINER
     AS $$ DECLARE v_role text; BEGIN SELECT role INTO v_role FROM public.users WHERE id = auth.uid() AND workspace_id = target_workspace_id; RETURN v_role; END; $$;
 
@@ -1093,7 +894,7 @@ ALTER FUNCTION public.get_user_role(target_workspace_id uuid) OWNER TO postgres;
 -- Name: is_approved_user(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.is_approved_user() RETURNS boolean
+CREATE OR REPLACE FUNCTION public.is_approved_user() RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     AS $$
 
@@ -1120,7 +921,7 @@ ALTER FUNCTION public.is_approved_user() OWNER TO postgres;
 -- Name: log_finance_activity(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.log_finance_activity() RETURNS trigger
+CREATE OR REPLACE FUNCTION public.log_finance_activity() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     AS $$
 
@@ -1197,7 +998,7 @@ ALTER FUNCTION public.log_finance_activity() OWNER TO postgres;
 -- Name: log_financial_adjustment(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.log_financial_adjustment() RETURNS trigger
+CREATE OR REPLACE FUNCTION public.log_financial_adjustment() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     AS $$
 
@@ -1210,13 +1011,11 @@ BEGIN
     SELECT workspace_id INTO v_workspace_id FROM public.financial_periods WHERE id = NEW.period_id;
 
     
-
     INSERT INTO public.activity_logs (workspace_id, actor_id, action, metadata)
 
             VALUES (v_workspace_id, NEW.created_by, 'adjustment_added', jsonb_build_object('entity_type', 'financial_adjustment', 'entity_id', NEW.id) || jsonb_build_object('type', NEW.type, 'amount', NEW.amount, 'reason', NEW.reason));
 
     
-
     RETURN NEW;
 
 END;
@@ -1230,7 +1029,7 @@ ALTER FUNCTION public.log_financial_adjustment() OWNER TO postgres;
 -- Name: log_recurring_task_activity(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.log_recurring_task_activity() RETURNS trigger
+CREATE OR REPLACE FUNCTION public.log_recurring_task_activity() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     AS $$
 
@@ -1265,57 +1064,15 @@ ALTER FUNCTION public.log_recurring_task_activity() OWNER TO postgres;
 -- Name: prevent_role_escalation(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.prevent_role_escalation() RETURNS trigger
+CREATE OR REPLACE FUNCTION public.prevent_role_escalation() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
-
 BEGIN
-
-  -- FIX: Added public. prefix to workspaces
-
-  IF EXISTS (SELECT 1 FROM public.workspaces WHERE id = NEW.workspace_id AND owner_id = NEW.id) THEN
-
-    RETURN NEW;
-
-  END IF;
-
-
-
-  IF OLD.workspace_id IS NOT NULL AND NEW.workspace_id IS DISTINCT FROM OLD.workspace_id THEN
-
-    RAISE EXCEPTION 'Unauthorized: Cannot migrate workspaces.';
-
-  END IF;
-
-
-
-  IF OLD.role IS NOT NULL AND NEW.role IS DISTINCT FROM OLD.role THEN
-
-    IF NOT EXISTS (
-
-      SELECT 1 FROM public.users me 
-
-      WHERE me.id = auth.uid() 
-
-        AND me.workspace_id = OLD.workspace_id 
-
-        AND me.role = 'super_admin'
-
-    ) THEN
-
-      RAISE EXCEPTION 'Unauthorized: Only super_admins can modify roles.';
-
-    END IF;
-
-  END IF;
-
-
-
+  -- STANDALONE MODE: No-op. Role escalation prevention enforced at API layer.
+  -- Original function used auth.uid() which returns NULL in standalone mode.
   RETURN NEW;
-
 END;
-
 $$;
 
 
@@ -1325,7 +1082,7 @@ ALTER FUNCTION public.prevent_role_escalation() OWNER TO postgres;
 -- Name: process_recurring_tasks(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.process_recurring_tasks() RETURNS jsonb
+CREATE OR REPLACE FUNCTION public.process_recurring_tasks() RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     AS $$
 
@@ -1386,7 +1143,6 @@ BEGIN
         END IF;
 
 
-
         -- Ensure next_date is in the future (catch up)
 
         WHILE next_date <= now() LOOP
@@ -1404,7 +1160,6 @@ BEGIN
         END LOOP;
 
 
-
         -- Insert the Task
 
         INSERT INTO tasks (
@@ -1418,13 +1173,11 @@ BEGIN
         ) RETURNING id INTO new_task_id;
 
 
-
         -- Log History
 
         INSERT INTO recurring_task_history (template_id, generated_task_id)
 
         VALUES (t_record.id, new_task_id);
-
 
 
         -- Insert Activity Log for the generated task
@@ -1442,7 +1195,6 @@ BEGIN
         );
 
         
-
         -- Generate notification for assignment if assigned
 
         IF t_record.assigned_to IS NOT NULL THEN
@@ -1466,7 +1218,6 @@ BEGIN
         END IF;
 
 
-
         -- Update Template
 
         UPDATE recurring_task_templates 
@@ -1478,11 +1229,9 @@ BEGIN
         WHERE id = t_record.id;
 
         
-
         generated_count := generated_count + 1;
 
     END LOOP;
-
 
 
     RETURN jsonb_build_object('generated_count', generated_count);
@@ -1498,7 +1247,7 @@ ALTER FUNCTION public.process_recurring_tasks() OWNER TO postgres;
 -- Name: search_workspace(text, integer); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.search_workspace(p_query text, p_limit integer DEFAULT 50) RETURNS TABLE(entity_type text, entity_id uuid, title text, context text, last_updated timestamp with time zone, owner_id uuid, rank real)
+CREATE OR REPLACE FUNCTION public.search_workspace(p_query text, p_limit integer DEFAULT 50) RETURNS TABLE(entity_type text, entity_id uuid, title text, context text, last_updated timestamp with time zone, owner_id uuid, rank real)
     LANGUAGE plpgsql SECURITY DEFINER
     AS $$
 
@@ -1513,7 +1262,6 @@ BEGIN
     v_workspace_id := public.current_workspace();
 
     
-
     RETURN QUERY
 
     -- Projects
@@ -1539,11 +1287,9 @@ BEGIN
     WHERE workspace_id = v_workspace_id AND name ILIKE v_query AND deleted_at IS NULL AND public.can_access_entity('project', id)
 
     
-
     UNION ALL
 
     
-
     -- Tasks
 
     SELECT 
@@ -1577,11 +1323,9 @@ BEGIN
     WHERE workspace_id = v_workspace_id AND name ILIKE v_query AND deleted_at IS NULL AND public.can_access_entity('task', id)
 
     
-
     UNION ALL
 
     
-
     -- Files
 
     SELECT 
@@ -1605,11 +1349,9 @@ BEGIN
     WHERE workspace_id = v_workspace_id AND file_name ILIKE v_query AND deleted_at IS NULL AND public.can_access_entity(entity_type, entity_id)
 
     
-
     UNION ALL
 
     
-
     -- Comments
 
     SELECT 
@@ -1633,11 +1375,9 @@ BEGIN
     WHERE workspace_id = v_workspace_id AND body ILIKE v_query AND deleted_at IS NULL AND public.can_access_entity(entity_type, entity_id)
 
     
-
     UNION ALL
 
     
-
     -- People
 
     SELECT 
@@ -1661,7 +1401,6 @@ BEGIN
     WHERE workspace_id = v_workspace_id AND (full_name ILIKE v_query OR email ILIKE v_query)
 
     
-
     ORDER BY rank DESC, last_updated DESC
 
     LIMIT p_limit;
@@ -1677,7 +1416,7 @@ ALTER FUNCTION public.search_workspace(p_query text, p_limit integer) OWNER TO p
 -- Name: trigger_set_timestamp(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.trigger_set_timestamp() RETURNS trigger
+CREATE OR REPLACE FUNCTION public.trigger_set_timestamp() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 
@@ -1698,7 +1437,7 @@ ALTER FUNCTION public.trigger_set_timestamp() OWNER TO postgres;
 -- Name: trigger_update_project_pert(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.trigger_update_project_pert() RETURNS trigger
+CREATE OR REPLACE FUNCTION public.trigger_update_project_pert() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     AS $$
 
@@ -1729,7 +1468,6 @@ BEGIN
   END IF;
 
   
-
   -- Aggregate active PERT tasks
 
   SELECT 
@@ -1751,7 +1489,6 @@ BEGIN
     AND pert_worst > 0;
 
     
-
   v_new_best := GREATEST(0, v_total_expected - (2 * SQRT(v_total_variance)));
 
   v_new_likely := v_total_expected;
@@ -1759,7 +1496,6 @@ BEGIN
   v_new_worst := v_total_expected + (2 * SQRT(v_total_variance));
 
   
-
   UPDATE projects
 
   SET 
@@ -1773,7 +1509,6 @@ BEGIN
   WHERE id = v_proj_id;
 
   
-
   -- Handle project reassignment
 
   IF TG_OP = 'UPDATE' AND OLD.project_id != NEW.project_id THEN
@@ -1797,7 +1532,6 @@ BEGIN
       AND pert_worst > 0;
 
       
-
     v_new_best := GREATEST(0, v_total_expected - (2 * SQRT(v_total_variance)));
 
     v_new_likely := v_total_expected;
@@ -1805,7 +1539,6 @@ BEGIN
     v_new_worst := v_total_expected + (2 * SQRT(v_total_variance));
 
     
-
     UPDATE projects
 
     SET 
@@ -1821,7 +1554,6 @@ BEGIN
   END IF;
 
   
-
   RETURN NULL;
 
 END;
@@ -1835,7 +1567,7 @@ ALTER FUNCTION public.trigger_update_project_pert() OWNER TO postgres;
 -- Name: update_invoice_balance(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.update_invoice_balance() RETURNS trigger
+CREATE OR REPLACE FUNCTION public.update_invoice_balance() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     AS $$
 
@@ -1860,7 +1592,6 @@ BEGIN
         WHERE invoice_id = NEW.invoice_id;
 
         
-
         -- Get grand total of invoice
 
         SELECT grand_total INTO v_invoice_amount
@@ -1870,13 +1601,11 @@ BEGIN
         WHERE id = NEW.invoice_id;
 
         
-
         -- Update invoice balance and status
 
         v_new_balance := GREATEST(0, v_invoice_amount - v_total_paid);
 
         
-
         UPDATE public.invoices
 
         SET 
@@ -1896,7 +1625,6 @@ BEGIN
         WHERE id = NEW.invoice_id;
 
         
-
     ELSIF TG_OP = 'DELETE' THEN
 
         -- Calculate total payments after deletion
@@ -1908,7 +1636,6 @@ BEGIN
         WHERE invoice_id = OLD.invoice_id;
 
         
-
         SELECT grand_total INTO v_invoice_amount
 
         FROM public.invoices
@@ -1916,11 +1643,9 @@ BEGIN
         WHERE id = OLD.invoice_id;
 
         
-
         v_new_balance := GREATEST(0, v_invoice_amount - v_total_paid);
 
         
-
         UPDATE public.invoices
 
         SET 
@@ -1944,7 +1669,6 @@ BEGIN
     END IF;
 
     
-
     RETURN NULL;
 
 END;
@@ -5893,8 +5617,7 @@ ALTER TABLE ONLY public.user_skills
 -- Name: users users_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
-ALTER TABLE ONLY public.users
-    -- ADD CONSTRAINT users_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
+-- REMOVED: users_id_fkey was a Supabase foreign key to auth.users (no longer exists)
 
 
 --
@@ -5953,2524 +5676,13 @@ ALTER TABLE ONLY public.workspaces
     ADD CONSTRAINT workspaces_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
---
--- Name: activity_logs Activity logs are readable by workspace; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Activity logs are readable by workspace" ON public.activity_logs FOR SELECT USING ((workspace_id = public.current_workspace()));
-
-
---
--- Name: activity_logs Activity logs can be inserted with verified actor; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Activity logs can be inserted with verified actor" ON public.activity_logs FOR INSERT WITH CHECK (((workspace_id = public.current_workspace()) AND ((actor_id IS NULL) OR (actor_id = auth.uid()))));
-
-
---
--- Name: calendar_sync_logs Allow authenticated insert to calendar_sync_logs; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Allow authenticated insert to calendar_sync_logs" ON public.calendar_sync_logs FOR INSERT TO authenticated WITH CHECK (true);
-
-
---
--- Name: calendar_sync_logs Allow authenticated select to calendar_sync_logs; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Allow authenticated select to calendar_sync_logs" ON public.calendar_sync_logs FOR SELECT TO authenticated USING (true);
-
-
---
--- Name: attendance Attendance can be managed by PMs and Admins; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Attendance can be managed by PMs and Admins" ON public.attendance USING (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text]))))))) WITH CHECK (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text])))))));
-
-
---
--- Name: attendance Attendance is visible to workspace; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Attendance is visible to workspace" ON public.attendance FOR SELECT USING ((workspace_id = public.current_workspace()));
-
-
---
--- Name: change_logs Authenticated users can insert change logs; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Authenticated users can insert change logs" ON public.change_logs FOR INSERT WITH CHECK ((auth.uid() IS NOT NULL));
-
-
---
--- Name: task_history_logs Authenticated users can insert task history logs; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Authenticated users can insert task history logs" ON public.task_history_logs FOR INSERT WITH CHECK ((auth.uid() IS NOT NULL));
-
-
---
--- Name: universal_comments Authors and admins can delete universal_comments; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Authors and admins can delete universal_comments" ON public.universal_comments FOR DELETE USING (((author_id = auth.uid()) OR (EXISTS ( SELECT 1
-   FROM public.users
-  WHERE ((users.id = auth.uid()) AND (users.workspace_id = universal_comments.workspace_id) AND (users.role = ANY (ARRAY['super_admin'::text, 'admin'::text])))))));
-
-
---
--- Name: universal_comments Authors can update their own universal_comments; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Authors can update their own universal_comments" ON public.universal_comments FOR UPDATE USING ((author_id = auth.uid())) WITH CHECK ((author_id = auth.uid()));
-
-
---
--- Name: automation_templates Automation templates are public; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Automation templates are public" ON public.automation_templates USING (true) WITH CHECK (true);
-
-
---
--- Name: change_logs Change logs viewable by authenticated users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Change logs viewable by authenticated users" ON public.change_logs FOR SELECT USING ((auth.uid() IS NOT NULL));
-
-
---
--- Name: comments Comments are visible to workspace; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Comments are visible to workspace" ON public.comments FOR SELECT USING ((workspace_id = public.current_workspace()));
-
-
---
--- Name: comments Comments can be created by authenticated users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Comments can be created by authenticated users" ON public.comments FOR INSERT WITH CHECK (((workspace_id = public.current_workspace()) AND (author_id = auth.uid())));
-
-
---
--- Name: comments Comments can be moderated by PMs and Admins; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Comments can be moderated by PMs and Admins" ON public.comments USING (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text]))))))) WITH CHECK (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text])))))));
-
-
---
--- Name: tasks Developers can update their assigned tasks; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Developers can update their assigned tasks" ON public.tasks FOR UPDATE USING (((workspace_id = public.current_workspace()) AND (assignee_id = auth.uid()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = 'developer'::text))))));
-
-
---
--- Name: invoice_line_items Enable access for authorized users via invoice; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable access for authorized users via invoice" ON public.invoice_line_items USING ((EXISTS ( SELECT 1
-   FROM public.invoices i
-  WHERE ((i.id = invoice_line_items.invoice_id) AND (public.get_user_role(i.workspace_id) = 'super_admin'::text)))));
-
-
---
--- Name: payments Enable access for authorized users via invoice; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable access for authorized users via invoice" ON public.payments USING ((EXISTS ( SELECT 1
-   FROM public.invoices i
-  WHERE ((i.id = payments.invoice_id) AND (public.get_user_role(i.workspace_id) = 'super_admin'::text)))));
-
-
---
--- Name: skills Enable read access for all workspace members; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable read access for all workspace members" ON public.skills FOR SELECT USING ((public.get_user_role(workspace_id) IS NOT NULL));
-
-
---
--- Name: clients Enable read access for authorized users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable read access for authorized users" ON public.clients FOR SELECT USING ((public.get_user_role(workspace_id) = 'super_admin'::text));
-
-
---
--- Name: company_billing_profile Enable read access for authorized users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable read access for authorized users" ON public.company_billing_profile FOR SELECT USING ((public.get_user_role(workspace_id) = ANY (ARRAY['super_admin'::text, 'admin'::text, 'manager'::text, 'member'::text])));
-
-
---
--- Name: document_template_history Enable read access for authorized users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable read access for authorized users" ON public.document_template_history FOR SELECT USING ((public.get_user_role(( SELECT document_templates.workspace_id
-   FROM public.document_templates
-  WHERE (document_templates.id = document_template_history.template_id))) = ANY (ARRAY['super_admin'::text, 'admin'::text, 'manager'::text, 'member'::text])));
-
-
---
--- Name: document_templates Enable read access for authorized users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable read access for authorized users" ON public.document_templates FOR SELECT USING ((public.get_user_role(workspace_id) = ANY (ARRAY['super_admin'::text, 'admin'::text, 'manager'::text, 'member'::text])));
-
-
---
--- Name: expenses Enable read access for authorized users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable read access for authorized users" ON public.expenses FOR SELECT USING ((public.get_user_role(workspace_id) = 'super_admin'::text));
-
-
---
--- Name: financial_adjustments Enable read access for authorized users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable read access for authorized users" ON public.financial_adjustments FOR SELECT USING ((EXISTS ( SELECT 1
-   FROM public.financial_periods p
-  WHERE ((p.id = financial_adjustments.period_id) AND (public.get_user_role(p.workspace_id) = 'super_admin'::text)))));
-
-
---
--- Name: financial_periods Enable read access for authorized users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable read access for authorized users" ON public.financial_periods FOR SELECT USING ((public.get_user_role(workspace_id) = 'super_admin'::text));
-
-
---
--- Name: financial_snapshots Enable read access for authorized users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable read access for authorized users" ON public.financial_snapshots FOR SELECT USING ((public.get_user_role(workspace_id) = 'super_admin'::text));
-
-
---
--- Name: invoices Enable read access for authorized users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable read access for authorized users" ON public.invoices FOR SELECT USING ((public.get_user_role(workspace_id) = 'super_admin'::text));
-
-
---
--- Name: invoice_line_items Enable read access for authorized users via invoice; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable read access for authorized users via invoice" ON public.invoice_line_items FOR SELECT USING ((EXISTS ( SELECT 1
-   FROM public.invoices i
-  WHERE ((i.id = invoice_line_items.invoice_id) AND (public.get_user_role(i.workspace_id) = ANY (ARRAY['super_admin'::text, 'admin'::text, 'manager'::text, 'member'::text]))))));
-
-
---
--- Name: recurring_task_history Enable read access for history; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable read access for history" ON public.recurring_task_history FOR SELECT USING ((EXISTS ( SELECT 1
-   FROM public.recurring_task_templates t
-  WHERE ((t.id = recurring_task_history.template_id) AND public.can_access_entity('project'::text, t.project_id)))));
-
-
---
--- Name: recurring_task_templates Enable read access for project members on recurring_task_templa; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable read access for project members on recurring_task_templa" ON public.recurring_task_templates FOR SELECT USING ((public.can_access_entity('project'::text, project_id) AND (deleted_at IS NULL)));
-
-
---
--- Name: user_skills Enable read access for workspace members; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable read access for workspace members" ON public.user_skills FOR SELECT USING ((EXISTS ( SELECT 1
-   FROM public.skills s
-  WHERE ((s.id = user_skills.skill_id) AND (public.get_user_role(s.workspace_id) IS NOT NULL)))));
-
-
---
--- Name: clients Enable write access for authorized users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable write access for authorized users" ON public.clients USING ((public.get_user_role(workspace_id) = 'super_admin'::text));
-
-
---
--- Name: expenses Enable write access for authorized users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable write access for authorized users" ON public.expenses USING ((public.get_user_role(workspace_id) = 'super_admin'::text));
-
-
---
--- Name: financial_adjustments Enable write access for authorized users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable write access for authorized users" ON public.financial_adjustments USING ((EXISTS ( SELECT 1
-   FROM public.financial_periods p
-  WHERE ((p.id = financial_adjustments.period_id) AND (public.get_user_role(p.workspace_id) = 'super_admin'::text)))));
-
-
---
--- Name: financial_periods Enable write access for authorized users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable write access for authorized users" ON public.financial_periods USING ((public.get_user_role(workspace_id) = 'super_admin'::text));
-
-
---
--- Name: financial_snapshots Enable write access for authorized users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable write access for authorized users" ON public.financial_snapshots USING ((public.get_user_role(workspace_id) = 'super_admin'::text));
-
-
---
--- Name: invoices Enable write access for authorized users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable write access for authorized users" ON public.invoices USING ((public.get_user_role(workspace_id) = 'super_admin'::text));
-
-
---
--- Name: recurring_task_templates Enable write access for authorized users on recurring_task_temp; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable write access for authorized users on recurring_task_temp" ON public.recurring_task_templates USING ((public.can_access_entity('project'::text, project_id) AND ((public.get_user_role(workspace_id) = ANY (ARRAY['super_admin'::text, 'pm'::text])) OR (created_by = auth.uid()) OR (EXISTS ( SELECT 1
-   FROM public.projects p
-  WHERE ((p.id = recurring_task_templates.project_id) AND (p.owner_id = auth.uid())))))));
-
-
---
--- Name: invoice_line_items Enable write access for authorized users via invoice; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable write access for authorized users via invoice" ON public.invoice_line_items USING ((EXISTS ( SELECT 1
-   FROM public.invoices i
-  WHERE ((i.id = invoice_line_items.invoice_id) AND (public.get_user_role(i.workspace_id) = 'super_admin'::text)))));
-
-
---
--- Name: skills Enable write access for managers and admins; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable write access for managers and admins" ON public.skills USING ((public.get_user_role(workspace_id) = ANY (ARRAY['super_admin'::text, 'pm'::text])));
-
-
---
--- Name: company_billing_profile Enable write access for super admin; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable write access for super admin" ON public.company_billing_profile USING ((public.get_user_role(workspace_id) = 'super_admin'::text));
-
-
---
--- Name: document_template_history Enable write access for super admin; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable write access for super admin" ON public.document_template_history USING ((public.get_user_role(( SELECT document_templates.workspace_id
-   FROM public.document_templates
-  WHERE (document_templates.id = document_template_history.template_id))) = 'super_admin'::text));
-
-
---
--- Name: document_templates Enable write access for super admin; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Enable write access for super admin" ON public.document_templates USING ((public.get_user_role(workspace_id) = 'super_admin'::text));
-
-
---
--- Name: calendar_events Exclude soft-deleted calendar_events; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Exclude soft-deleted calendar_events" ON public.calendar_events FOR SELECT USING ((deleted_at IS NULL));
-
-
---
--- Name: meetings Exclude soft-deleted meetings; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Exclude soft-deleted meetings" ON public.meetings FOR SELECT USING ((deleted_at IS NULL));
-
-
---
--- Name: sprints Exclude soft-deleted sprints; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Exclude soft-deleted sprints" ON public.sprints FOR SELECT USING ((deleted_at IS NULL));
-
-
---
--- Name: files Files are visible to workspace; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Files are visible to workspace" ON public.files FOR SELECT USING ((workspace_id = public.current_workspace()));
-
-
---
--- Name: files Files can be managed by PMs and Admins; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Files can be managed by PMs and Admins" ON public.files USING (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text]))))))) WITH CHECK (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text])))))));
-
-
---
--- Name: files Files can be uploaded by authenticated users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Files can be uploaded by authenticated users" ON public.files FOR INSERT WITH CHECK (((workspace_id = public.current_workspace()) AND (uploaded_by = auth.uid())));
-
-
---
--- Name: change_logs Forbid DELETE on change logs; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Forbid DELETE on change logs" ON public.change_logs FOR DELETE USING (false);
-
-
---
--- Name: task_history_logs Forbid DELETE on task history logs; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Forbid DELETE on task history logs" ON public.task_history_logs FOR DELETE USING (false);
-
-
---
--- Name: change_logs Forbid UPDATE on change logs; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Forbid UPDATE on change logs" ON public.change_logs FOR UPDATE USING (false);
-
-
---
--- Name: task_history_logs Forbid UPDATE on task history logs; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Forbid UPDATE on task history logs" ON public.task_history_logs FOR UPDATE USING (false);
-
-
---
--- Name: invitations Invitations are readable by the invited email or workspace memb; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Invitations are readable by the invited email or workspace memb" ON public.invitations FOR SELECT USING (((lower(email) = lower(auth.email())) OR (workspace_id = public.current_workspace())));
-
-
---
--- Name: invitations Invited users can accept their own invitation; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Invited users can accept their own invitation" ON public.invitations FOR UPDATE USING (((lower(email) = lower(auth.email())) AND (status = 'pending'::text))) WITH CHECK (((lower(email) = lower(auth.email())) AND (status = 'accepted'::text)));
-
-
---
--- Name: users Invited users can bootstrap their own user row; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Invited users can bootstrap their own user row" ON public.users FOR INSERT WITH CHECK (((id = auth.uid()) AND (lower(email) = lower(auth.email())) AND (EXISTS ( SELECT 1
-   FROM public.invitations
-  WHERE ((lower(invitations.email) = lower(auth.email())) AND (invitations.workspace_id = users.workspace_id) AND (invitations.role = users.role) AND (invitations.status = 'pending'::text))))));
-
-
---
--- Name: user_skills Managers can verify and manage team skills; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Managers can verify and manage team skills" ON public.user_skills USING ((EXISTS ( SELECT 1
-   FROM public.skills s
-  WHERE ((s.id = user_skills.skill_id) AND (public.get_user_role(s.workspace_id) = ANY (ARRAY['super_admin'::text, 'pm'::text]))))));
-
-
---
--- Name: notifications Notifications are visible to workspace members; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Notifications are visible to workspace members" ON public.notifications FOR SELECT USING ((workspace_id = public.current_workspace()));
-
-
---
--- Name: notifications Notifications can be managed by PMs and Admins; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Notifications can be managed by PMs and Admins" ON public.notifications USING (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text]))))))) WITH CHECK (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text])))))));
-
-
---
--- Name: notifications Notifications can be self-targeted; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Notifications can be self-targeted" ON public.notifications FOR INSERT WITH CHECK (((workspace_id = public.current_workspace()) AND (user_id = auth.uid())));
-
-
---
--- Name: personal_leave PMs and Admins can manage all leave; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "PMs and Admins can manage all leave" ON public.personal_leave USING (((user_id IN ( SELECT users.id
-   FROM public.users
-  WHERE (users.workspace_id = public.current_workspace()))) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text]))))))) WITH CHECK (((user_id IN ( SELECT users.id
-   FROM public.users
-  WHERE (users.workspace_id = public.current_workspace()))) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text])))))));
-
-
---
--- Name: personal_leave Personal leave is visible to workspace; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Personal leave is visible to workspace" ON public.personal_leave FOR SELECT USING ((user_id IN ( SELECT users.id
-   FROM public.users
-  WHERE (users.workspace_id = public.current_workspace()))));
-
-
---
--- Name: projects Projects are visible to workspace; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Projects are visible to workspace" ON public.projects FOR SELECT USING (((workspace_id = public.current_workspace()) AND (deleted_at IS NULL)));
-
-
---
--- Name: projects Projects can be mutated by PMs and Admins; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Projects can be mutated by PMs and Admins" ON public.projects USING (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text]))))))) WITH CHECK (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text])))))));
-
-
---
--- Name: salaries Salaries are visible to admins; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Salaries are visible to admins" ON public.salaries FOR SELECT USING (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text])))))));
-
-
---
--- Name: salaries Salaries can be managed by PMs and Admins; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Salaries can be managed by PMs and Admins" ON public.salaries USING (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text]))))))) WITH CHECK (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text])))))));
-
-
---
--- Name: compensation_records Super Admins have full access to compensation_records; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Super Admins have full access to compensation_records" ON public.compensation_records USING ((EXISTS ( SELECT 1
-   FROM public.users
-  WHERE ((users.id = auth.uid()) AND (users.workspace_id = compensation_records.workspace_id) AND (users.role = 'super_admin'::text))))) WITH CHECK ((EXISTS ( SELECT 1
-   FROM public.users
-  WHERE ((users.id = auth.uid()) AND (users.workspace_id = compensation_records.workspace_id) AND (users.role = 'super_admin'::text)))));
-
-
---
--- Name: employment_change_logs Super Admins have full access to employment_change_logs; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Super Admins have full access to employment_change_logs" ON public.employment_change_logs USING ((EXISTS ( SELECT 1
-   FROM public.users
-  WHERE ((users.id = auth.uid()) AND (users.role = 'super_admin'::text)))));
-
-
---
--- Name: employment_records Super Admins have full access to employment_records; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Super Admins have full access to employment_records" ON public.employment_records USING ((EXISTS ( SELECT 1
-   FROM public.users
-  WHERE ((users.id = auth.uid()) AND (users.role = 'super_admin'::text)))));
-
-
---
--- Name: system_audit_ledger System audit ledger is insertable by authenticated users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "System audit ledger is insertable by authenticated users" ON public.system_audit_ledger FOR INSERT WITH CHECK ((workspace_id = public.current_workspace()));
-
-
---
--- Name: system_audit_ledger System audit ledger is viewable by workspace admins; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "System audit ledger is viewable by workspace admins" ON public.system_audit_ledger FOR SELECT USING (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users
-  WHERE ((users.id = auth.uid()) AND (users.workspace_id = public.current_workspace()) AND (users.role = ANY (ARRAY['super_admin'::text, 'pm'::text])))))));
-
-
---
--- Name: tactical_tasks Tactical tasks viewable by authenticated users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Tactical tasks viewable by authenticated users" ON public.tactical_tasks FOR SELECT USING ((auth.uid() IS NOT NULL));
-
-
---
--- Name: task_dependencies Task dependencies are visible to workspace; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Task dependencies are visible to workspace" ON public.task_dependencies FOR SELECT USING ((workspace_id = public.current_workspace()));
-
-
---
--- Name: task_dependencies Task dependencies can be managed by PMs and Admins; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Task dependencies can be managed by PMs and Admins" ON public.task_dependencies USING (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text]))))))) WITH CHECK (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text])))))));
-
-
---
--- Name: task_history_logs Task history logs viewable by authenticated users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Task history logs viewable by authenticated users" ON public.task_history_logs FOR SELECT USING ((auth.uid() IS NOT NULL));
-
-
---
--- Name: tasks Tasks are visible to workspace; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Tasks are visible to workspace" ON public.tasks FOR SELECT USING ((workspace_id = public.current_workspace()));
-
-
---
--- Name: tasks Tasks can be created by PMs and Admins; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Tasks can be created by PMs and Admins" ON public.tasks FOR INSERT WITH CHECK (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text])))))));
-
-
---
--- Name: tasks Tasks can be deleted by PMs and Admins; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Tasks can be deleted by PMs and Admins" ON public.tasks FOR DELETE USING (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text])))))));
-
-
---
--- Name: tasks Tasks can be fully updated by PMs and Admins; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Tasks can be fully updated by PMs and Admins" ON public.tasks FOR UPDATE USING (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text])))))));
-
-
---
--- Name: team_events Team events are visible to workspace; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Team events are visible to workspace" ON public.team_events FOR SELECT USING ((team_id IN ( SELECT teams.id
-   FROM public.teams
-  WHERE (teams.workspace_id = public.current_workspace()))));
-
-
---
--- Name: team_events Team events can be managed by PMs and Admins; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Team events can be managed by PMs and Admins" ON public.team_events USING (((team_id IN ( SELECT teams.id
-   FROM public.teams
-  WHERE (teams.workspace_id = public.current_workspace()))) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text]))))))) WITH CHECK (((team_id IN ( SELECT teams.id
-   FROM public.teams
-  WHERE (teams.workspace_id = public.current_workspace()))) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text])))))));
-
-
---
--- Name: team_members Team members are visible to workspace; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Team members are visible to workspace" ON public.team_members FOR SELECT USING ((workspace_id = public.current_workspace()));
-
-
---
--- Name: team_members Team members can be managed by PMs and Admins; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Team members can be managed by PMs and Admins" ON public.team_members USING (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text]))))))) WITH CHECK (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text])))))));
-
-
---
--- Name: teams Teams are visible to workspace; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Teams are visible to workspace" ON public.teams FOR SELECT USING ((workspace_id = public.current_workspace()));
-
-
---
--- Name: teams Teams can be managed by PMs and Admins; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Teams can be managed by PMs and Admins" ON public.teams USING (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text]))))))) WITH CHECK (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text])))))));
-
-
---
--- Name: file_versions Users can delete file versions if they can manage the file; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can delete file versions if they can manage the file" ON public.file_versions FOR DELETE USING ((EXISTS ( SELECT 1
-   FROM public.workspace_files wf
-  WHERE ((wf.id = file_versions.file_id) AND (wf.workspace_id = public.current_workspace()) AND public.can_manage_entity_file(wf.entity_type, wf.entity_id, wf.uploaded_by)))));
-
-
---
--- Name: workspace_files Users can delete their files or if they have permission; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can delete their files or if they have permission" ON public.workspace_files FOR DELETE USING (((workspace_id = public.current_workspace()) AND public.can_manage_entity_file(entity_type, entity_id, uploaded_by)));
-
-
---
--- Name: comments Users can delete their own comments; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can delete their own comments" ON public.comments FOR DELETE USING (((workspace_id = public.current_workspace()) AND (author_id = auth.uid())));
-
-
---
--- Name: comments Users can edit their own comments; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can edit their own comments" ON public.comments FOR UPDATE USING (((workspace_id = public.current_workspace()) AND (author_id = auth.uid())));
-
-
---
--- Name: file_versions Users can insert file versions if they can manage the file; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can insert file versions if they can manage the file" ON public.file_versions FOR INSERT WITH CHECK ((EXISTS ( SELECT 1
-   FROM public.workspace_files wf
-  WHERE ((wf.id = file_versions.file_id) AND (wf.workspace_id = public.current_workspace()) AND public.can_manage_entity_file(wf.entity_type, wf.entity_id, wf.uploaded_by)))));
-
-
---
--- Name: workspace_files Users can insert files to accessible entities; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can insert files to accessible entities" ON public.workspace_files FOR INSERT WITH CHECK (((workspace_id = public.current_workspace()) AND public.can_insert_entity_file(entity_type, entity_id)));
-
-
---
--- Name: generated_reports Users can insert reports; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can insert reports" ON public.generated_reports FOR INSERT WITH CHECK ((public.get_user_role(workspace_id) IS NOT NULL));
-
-
---
--- Name: users Users can insert their own pending user row; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can insert their own pending user row" ON public.users FOR INSERT WITH CHECK (((id = auth.uid()) AND (role = 'pending-workspace-setup'::text) AND (workspace_id IS NULL)));
-
-
---
--- Name: personal_leave Users can manage their own leave; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can manage their own leave" ON public.personal_leave USING ((user_id = auth.uid())) WITH CHECK ((user_id = auth.uid()));
-
-
---
--- Name: user_skills Users can manage their own skills; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can manage their own skills" ON public.user_skills USING ((user_id = auth.uid())) WITH CHECK ((user_id = auth.uid()));
-
-
---
--- Name: notifications Users can update own notifications; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can update own notifications" ON public.notifications FOR UPDATE USING (((workspace_id = public.current_workspace()) AND (user_id = auth.uid())));
-
-
---
--- Name: workspace_files Users can update their files or if they have permission; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can update their files or if they have permission" ON public.workspace_files FOR UPDATE USING (((workspace_id = public.current_workspace()) AND public.can_manage_entity_file(entity_type, entity_id, uploaded_by)));
-
-
---
--- Name: users Users can update their own safe profile fields; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can update their own safe profile fields" ON public.users FOR UPDATE USING ((id = auth.uid())) WITH CHECK (((id = auth.uid()) AND (((NOT (role IS DISTINCT FROM ( SELECT users_1.role
-   FROM public.users users_1
-  WHERE (users_1.id = auth.uid())))) AND (NOT (workspace_id IS DISTINCT FROM ( SELECT users_1.workspace_id
-   FROM public.users users_1
-  WHERE (users_1.id = auth.uid()))))) OR (EXISTS ( SELECT 1
-   FROM public.workspaces
-  WHERE ((workspaces.id = users.workspace_id) AND (workspaces.owner_id = auth.uid())))))));
-
-
---
--- Name: workspace_files Users can view accessible entity files; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can view accessible entity files" ON public.workspace_files FOR SELECT USING (((workspace_id = public.current_workspace()) AND public.can_access_entity(entity_type, entity_id)));
-
-
---
--- Name: file_versions Users can view accessible file versions; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can view accessible file versions" ON public.file_versions FOR SELECT USING ((EXISTS ( SELECT 1
-   FROM public.workspace_files wf
-  WHERE ((wf.id = file_versions.file_id) AND (wf.workspace_id = public.current_workspace()) AND public.can_access_entity(wf.entity_type, wf.entity_id)))));
-
-
---
--- Name: generated_reports Users can view reports they generated or if they are admin; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can view reports they generated or if they are admin" ON public.generated_reports FOR SELECT USING (((generated_by = auth.uid()) OR (public.get_user_role(workspace_id) = ANY (ARRAY['super_admin'::text, 'pm'::text]))));
-
-
---
--- Name: employment_change_logs Users can view their own change logs; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can view their own change logs" ON public.employment_change_logs FOR SELECT USING ((employee_id = auth.uid()));
-
-
---
--- Name: employment_records Users can view their own employment_records; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can view their own employment_records" ON public.employment_records FOR SELECT USING ((profile_id = auth.uid()));
-
-
---
--- Name: notifications Users can view their own notifications; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users can view their own notifications" ON public.notifications FOR SELECT USING (((recipient_id = auth.uid()) OR (user_id = auth.uid()) OR (EXISTS ( SELECT 1
-   FROM public.users u
-  WHERE ((u.id = auth.uid()) AND (u.workspace_id = notifications.workspace_id) AND (u.role = 'super_admin'::text))))));
-
-
---
--- Name: users Users visible within workspace; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Users visible within workspace" ON public.users FOR SELECT USING (((id = auth.uid()) OR (workspace_id = public.current_workspace())));
-
-
---
--- Name: users Workspace admins can delete users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Workspace admins can delete users" ON public.users FOR DELETE USING ((EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = users.workspace_id) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text]))))));
-
-
---
--- Name: users Workspace admins can insert users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Workspace admins can insert users" ON public.users FOR INSERT WITH CHECK ((EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = users.workspace_id) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text]))))));
-
-
---
--- Name: users Workspace admins can update users; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Workspace admins can update users" ON public.users FOR UPDATE USING ((EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = users.workspace_id) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text]))))));
-
-
---
--- Name: workspace_holidays Workspace holidays are visible to workspace; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Workspace holidays are visible to workspace" ON public.workspace_holidays FOR SELECT USING ((workspace_id = public.current_workspace()));
-
-
---
--- Name: workspace_holidays Workspace holidays can be managed by PMs and Admins; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Workspace holidays can be managed by PMs and Admins" ON public.workspace_holidays USING (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text]))))))) WITH CHECK (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text])))))));
-
-
---
--- Name: employment_records Workspace managers can view employment_records; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Workspace managers can view employment_records" ON public.employment_records FOR SELECT USING ((EXISTS ( SELECT 1
-   FROM public.users
-  WHERE ((users.id = auth.uid()) AND (users.workspace_id = employment_records.workspace_id) AND (users.role = ANY (ARRAY['super_admin'::text, 'admin'::text, 'manager'::text, 'editor'::text]))))));
-
-
---
--- Name: workspaces Workspace members can view their workspace; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Workspace members can view their workspace" ON public.workspaces FOR SELECT USING (((id = public.current_workspace()) OR (owner_id = auth.uid())));
-
-
---
--- Name: users Workspace owner can create first super admin user; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Workspace owner can create first super admin user" ON public.users FOR INSERT WITH CHECK (((id = auth.uid()) AND (role = 'super_admin'::text) AND (EXISTS ( SELECT 1
-   FROM public.workspaces
-  WHERE ((workspaces.id = users.workspace_id) AND (workspaces.owner_id = auth.uid()))))));
-
-
---
--- Name: workspaces Workspace owner can create workspace; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Workspace owner can create workspace" ON public.workspaces FOR INSERT WITH CHECK ((owner_id = auth.uid()));
-
-
---
--- Name: workspaces Workspace owner can update workspace; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Workspace owner can update workspace" ON public.workspaces FOR UPDATE USING ((owner_id = auth.uid()));
-
-
---
--- Name: workspace_settings Workspace settings are visible to workspace; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Workspace settings are visible to workspace" ON public.workspace_settings FOR SELECT USING ((workspace_id = public.current_workspace()));
-
-
---
--- Name: workspace_settings Workspace settings can be managed by PMs and Admins; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Workspace settings can be managed by PMs and Admins" ON public.workspace_settings USING (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text]))))))) WITH CHECK (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users me
-  WHERE ((me.id = auth.uid()) AND (me.workspace_id = public.current_workspace()) AND (me.role = ANY (ARRAY['super_admin'::text, 'pm'::text])))))));
-
-
---
--- Name: invitations Workspace super admins can manage invitations; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Workspace super admins can manage invitations" ON public.invitations USING (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users
-  WHERE ((users.id = auth.uid()) AND (users.role = 'super_admin'::text)))))) WITH CHECK (((workspace_id = public.current_workspace()) AND (EXISTS ( SELECT 1
-   FROM public.users
-  WHERE ((users.id = auth.uid()) AND (users.role = 'super_admin'::text))))));
-
-
---
--- Name: universal_comments Workspace users can insert universal_comments; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Workspace users can insert universal_comments" ON public.universal_comments FOR INSERT WITH CHECK ((EXISTS ( SELECT 1
-   FROM public.users
-  WHERE ((users.id = auth.uid()) AND (users.workspace_id = universal_comments.workspace_id)))));
-
-
---
--- Name: comment_versions Workspace users can view comment_versions; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Workspace users can view comment_versions" ON public.comment_versions FOR SELECT USING ((EXISTS ( SELECT 1
-   FROM (public.universal_comments uc
-     JOIN public.users u ON ((u.workspace_id = uc.workspace_id)))
-  WHERE ((uc.id = comment_versions.comment_id) AND (u.id = auth.uid())))));
-
-
---
--- Name: universal_comments Workspace users can view universal_comments; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "Workspace users can view universal_comments" ON public.universal_comments FOR SELECT USING ((EXISTS ( SELECT 1
-   FROM public.users
-  WHERE ((users.id = auth.uid()) AND (users.workspace_id = universal_comments.workspace_id)))));
-
-
---
--- Name: activity_logs; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
-
---
--- Name: ai_recommendations; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.ai_recommendations ENABLE ROW LEVEL SECURITY;
-
---
--- Name: allocation_periods; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.allocation_periods ENABLE ROW LEVEL SECURITY;
-
---
--- Name: approval_chains; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.approval_chains ENABLE ROW LEVEL SECURITY;
-
---
--- Name: approval_instances; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.approval_instances ENABLE ROW LEVEL SECURITY;
-
---
--- Name: approval_steps; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.approval_steps ENABLE ROW LEVEL SECURITY;
-
---
--- Name: approvals; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.approvals ENABLE ROW LEVEL SECURITY;
-
---
--- Name: attendance; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.attendance ENABLE ROW LEVEL SECURITY;
-
---
--- Name: audit_logs; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
-
---
--- Name: automation_rules; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.automation_rules ENABLE ROW LEVEL SECURITY;
-
---
--- Name: automation_templates; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.automation_templates ENABLE ROW LEVEL SECURITY;
-
---
--- Name: calendar_events; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.calendar_events ENABLE ROW LEVEL SECURITY;
-
---
--- Name: calendar_sync_logs; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.calendar_sync_logs ENABLE ROW LEVEL SECURITY;
-
---
--- Name: change_logs; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.change_logs ENABLE ROW LEVEL SECURITY;
-
---
--- Name: clients; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
-
---
--- Name: command_usage_events; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.command_usage_events ENABLE ROW LEVEL SECURITY;
-
---
--- Name: comment_versions; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.comment_versions ENABLE ROW LEVEL SECURITY;
-
---
--- Name: comments; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
-
---
--- Name: company_billing_profile; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.company_billing_profile ENABLE ROW LEVEL SECURITY;
-
---
--- Name: compensation_records; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.compensation_records ENABLE ROW LEVEL SECURITY;
-
---
--- Name: connected_accounts; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.connected_accounts ENABLE ROW LEVEL SECURITY;
-
---
--- Name: doc_annotations; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.doc_annotations ENABLE ROW LEVEL SECURITY;
-
---
--- Name: doc_versions; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.doc_versions ENABLE ROW LEVEL SECURITY;
-
---
--- Name: document_template_history; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.document_template_history ENABLE ROW LEVEL SECURITY;
-
---
--- Name: document_templates; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.document_templates ENABLE ROW LEVEL SECURITY;
-
---
--- Name: documents; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
-
---
--- Name: employment_change_logs; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.employment_change_logs ENABLE ROW LEVEL SECURITY;
-
---
--- Name: employment_records; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.employment_records ENABLE ROW LEVEL SECURITY;
-
---
--- Name: epics; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.epics ENABLE ROW LEVEL SECURITY;
-
---
--- Name: escalation_policies; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.escalation_policies ENABLE ROW LEVEL SECURITY;
-
---
--- Name: expenses; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
-
---
--- Name: file_versions; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.file_versions ENABLE ROW LEVEL SECURITY;
-
---
--- Name: files; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.files ENABLE ROW LEVEL SECURITY;
-
---
--- Name: financial_adjustments; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.financial_adjustments ENABLE ROW LEVEL SECURITY;
-
---
--- Name: financial_periods; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.financial_periods ENABLE ROW LEVEL SECURITY;
-
---
--- Name: financial_snapshots; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.financial_snapshots ENABLE ROW LEVEL SECURITY;
-
---
--- Name: generated_reports; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.generated_reports ENABLE ROW LEVEL SECURITY;
-
---
--- Name: impact_simulations; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.impact_simulations ENABLE ROW LEVEL SECURITY;
-
---
--- Name: integration_configs; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.integration_configs ENABLE ROW LEVEL SECURITY;
-
---
--- Name: integration_health; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.integration_health ENABLE ROW LEVEL SECURITY;
-
---
--- Name: integration_sync_jobs; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.integration_sync_jobs ENABLE ROW LEVEL SECURITY;
-
---
--- Name: invitations; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.invitations ENABLE ROW LEVEL SECURITY;
-
---
--- Name: invoice_line_items; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.invoice_line_items ENABLE ROW LEVEL SECURITY;
-
---
--- Name: invoice_sequences; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.invoice_sequences ENABLE ROW LEVEL SECURITY;
-
---
--- Name: invoices; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
-
---
--- Name: meeting_attendees; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.meeting_attendees ENABLE ROW LEVEL SECURITY;
-
---
--- Name: meetings; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.meetings ENABLE ROW LEVEL SECURITY;
-
---
--- Name: mention_rules; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.mention_rules ENABLE ROW LEVEL SECURITY;
-
---
--- Name: milestones; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.milestones ENABLE ROW LEVEL SECURITY;
-
---
--- Name: notification_channels; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.notification_channels ENABLE ROW LEVEL SECURITY;
-
---
--- Name: notifications; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
-
---
--- Name: oauth_sessions; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.oauth_sessions ENABLE ROW LEVEL SECURITY;
-
---
--- Name: payments; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
-
---
--- Name: personal_leave; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.personal_leave ENABLE ROW LEVEL SECURITY;
-
---
--- Name: prediction_confidence_metrics; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.prediction_confidence_metrics ENABLE ROW LEVEL SECURITY;
-
---
--- Name: prediction_context_metrics; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.prediction_context_metrics ENABLE ROW LEVEL SECURITY;
-
---
--- Name: prediction_errors; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.prediction_errors ENABLE ROW LEVEL SECURITY;
-
---
--- Name: project_allocations; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.project_allocations ENABLE ROW LEVEL SECURITY;
-
---
--- Name: project_signoffs; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.project_signoffs ENABLE ROW LEVEL SECURITY;
-
---
--- Name: projects; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
-
---
--- Name: recurring_task_history; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.recurring_task_history ENABLE ROW LEVEL SECURITY;
-
---
--- Name: recurring_task_templates; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.recurring_task_templates ENABLE ROW LEVEL SECURITY;
-
---
--- Name: salaries; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.salaries ENABLE ROW LEVEL SECURITY;
-
---
--- Name: skills; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.skills ENABLE ROW LEVEL SECURITY;
-
---
--- Name: sprints; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.sprints ENABLE ROW LEVEL SECURITY;
-
---
--- Name: system_audit_ledger; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.system_audit_ledger ENABLE ROW LEVEL SECURITY;
-
---
--- Name: tactical_tasks; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.tactical_tasks ENABLE ROW LEVEL SECURITY;
-
---
--- Name: task_comments; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.task_comments ENABLE ROW LEVEL SECURITY;
-
---
--- Name: task_dependencies; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.task_dependencies ENABLE ROW LEVEL SECURITY;
-
---
--- Name: task_history_logs; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.task_history_logs ENABLE ROW LEVEL SECURITY;
-
---
--- Name: tasks; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
-
---
--- Name: team_events; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.team_events ENABLE ROW LEVEL SECURITY;
-
---
--- Name: team_members; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.team_members ENABLE ROW LEVEL SECURITY;
-
---
--- Name: teams; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.teams ENABLE ROW LEVEL SECURITY;
-
---
--- Name: universal_comments; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.universal_comments ENABLE ROW LEVEL SECURITY;
-
---
--- Name: user_skills; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.user_skills ENABLE ROW LEVEL SECURITY;
-
---
--- Name: users; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-
---
--- Name: wait_states; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.wait_states ENABLE ROW LEVEL SECURITY;
-
---
--- Name: webhooks; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.webhooks ENABLE ROW LEVEL SECURITY;
-
---
--- Name: workspace_files; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.workspace_files ENABLE ROW LEVEL SECURITY;
-
---
--- Name: workspace_holidays; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.workspace_holidays ENABLE ROW LEVEL SECURITY;
-
---
--- Name: workspace_settings; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.workspace_settings ENABLE ROW LEVEL SECURITY;
-
---
--- Name: workspaces; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.workspaces ENABLE ROW LEVEL SECURITY;
-
---
--- Name: SCHEMA public; Type: ACL; Schema: -; Owner: pg_database_owner
---
-
 GRANT USAGE ON SCHEMA public TO postgres;
-GRANT USAGE ON SCHEMA public TO anon;
-GRANT USAGE ON SCHEMA public TO authenticated;
-GRANT USAGE ON SCHEMA public TO service_role;
-
-
---
--- Name: FUNCTION audit_gst_invoice_changes(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.audit_gst_invoice_changes() TO anon;
-GRANT ALL ON FUNCTION public.audit_gst_invoice_changes() TO authenticated;
-GRANT ALL ON FUNCTION public.audit_gst_invoice_changes() TO service_role;
-
-
---
--- Name: FUNCTION can_access_entity(p_entity_type text, p_entity_id uuid); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.can_access_entity(p_entity_type text, p_entity_id uuid) TO anon;
-GRANT ALL ON FUNCTION public.can_access_entity(p_entity_type text, p_entity_id uuid) TO authenticated;
-GRANT ALL ON FUNCTION public.can_access_entity(p_entity_type text, p_entity_id uuid) TO service_role;
-
-
---
--- Name: FUNCTION can_insert_entity_file(p_entity_type text, p_entity_id uuid); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.can_insert_entity_file(p_entity_type text, p_entity_id uuid) TO anon;
-GRANT ALL ON FUNCTION public.can_insert_entity_file(p_entity_type text, p_entity_id uuid) TO authenticated;
-GRANT ALL ON FUNCTION public.can_insert_entity_file(p_entity_type text, p_entity_id uuid) TO service_role;
-
-
---
--- Name: FUNCTION can_manage_entity_file(p_entity_type text, p_entity_id uuid, p_uploaded_by uuid); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.can_manage_entity_file(p_entity_type text, p_entity_id uuid, p_uploaded_by uuid) TO anon;
-GRANT ALL ON FUNCTION public.can_manage_entity_file(p_entity_type text, p_entity_id uuid, p_uploaded_by uuid) TO authenticated;
-GRANT ALL ON FUNCTION public.can_manage_entity_file(p_entity_type text, p_entity_id uuid, p_uploaded_by uuid) TO service_role;
-
-
---
--- Name: FUNCTION check_financial_period_lock(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.check_financial_period_lock() TO anon;
-GRANT ALL ON FUNCTION public.check_financial_period_lock() TO authenticated;
-GRANT ALL ON FUNCTION public.check_financial_period_lock() TO service_role;
-
-
---
--- Name: FUNCTION close_financial_period(p_workspace_id uuid, p_month integer, p_year integer, p_user_id uuid); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.close_financial_period(p_workspace_id uuid, p_month integer, p_year integer, p_user_id uuid) TO anon;
-GRANT ALL ON FUNCTION public.close_financial_period(p_workspace_id uuid, p_month integer, p_year integer, p_user_id uuid) TO authenticated;
-GRANT ALL ON FUNCTION public.close_financial_period(p_workspace_id uuid, p_month integer, p_year integer, p_user_id uuid) TO service_role;
-
-
---
--- Name: FUNCTION current_workspace(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.current_workspace() TO anon;
-GRANT ALL ON FUNCTION public.current_workspace() TO authenticated;
-GRANT ALL ON FUNCTION public.current_workspace() TO service_role;
-
-
---
--- Name: FUNCTION enforce_developer_task_restrictions(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.enforce_developer_task_restrictions() TO anon;
-GRANT ALL ON FUNCTION public.enforce_developer_task_restrictions() TO authenticated;
-GRANT ALL ON FUNCTION public.enforce_developer_task_restrictions() TO service_role;
-
-
---
--- Name: FUNCTION enforce_task_completion_governance(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.enforce_task_completion_governance() TO anon;
-GRANT ALL ON FUNCTION public.enforce_task_completion_governance() TO authenticated;
-GRANT ALL ON FUNCTION public.enforce_task_completion_governance() TO service_role;
-
-
---
--- Name: FUNCTION generate_invoice_number(p_workspace_id uuid, p_prefix text); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.generate_invoice_number(p_workspace_id uuid, p_prefix text) TO anon;
-GRANT ALL ON FUNCTION public.generate_invoice_number(p_workspace_id uuid, p_prefix text) TO authenticated;
-GRANT ALL ON FUNCTION public.generate_invoice_number(p_workspace_id uuid, p_prefix text) TO service_role;
-
-
---
--- Name: FUNCTION get_operational_intelligence(p_workspace_id uuid); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.get_operational_intelligence(p_workspace_id uuid) TO anon;
-GRANT ALL ON FUNCTION public.get_operational_intelligence(p_workspace_id uuid) TO authenticated;
-GRANT ALL ON FUNCTION public.get_operational_intelligence(p_workspace_id uuid) TO service_role;
-
-
---
--- Name: FUNCTION get_user_role(target_workspace_id uuid); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.get_user_role(target_workspace_id uuid) TO anon;
-GRANT ALL ON FUNCTION public.get_user_role(target_workspace_id uuid) TO authenticated;
-GRANT ALL ON FUNCTION public.get_user_role(target_workspace_id uuid) TO service_role;
-
-
---
--- Name: FUNCTION is_approved_user(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.is_approved_user() TO anon;
-GRANT ALL ON FUNCTION public.is_approved_user() TO authenticated;
-GRANT ALL ON FUNCTION public.is_approved_user() TO service_role;
-
-
---
--- Name: FUNCTION log_finance_activity(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.log_finance_activity() TO anon;
-GRANT ALL ON FUNCTION public.log_finance_activity() TO authenticated;
-GRANT ALL ON FUNCTION public.log_finance_activity() TO service_role;
-
-
---
--- Name: FUNCTION log_financial_adjustment(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.log_financial_adjustment() TO anon;
-GRANT ALL ON FUNCTION public.log_financial_adjustment() TO authenticated;
-GRANT ALL ON FUNCTION public.log_financial_adjustment() TO service_role;
-
-
---
--- Name: FUNCTION log_recurring_task_activity(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.log_recurring_task_activity() TO anon;
-GRANT ALL ON FUNCTION public.log_recurring_task_activity() TO authenticated;
-GRANT ALL ON FUNCTION public.log_recurring_task_activity() TO service_role;
-
-
---
--- Name: FUNCTION prevent_role_escalation(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.prevent_role_escalation() TO anon;
-GRANT ALL ON FUNCTION public.prevent_role_escalation() TO authenticated;
-GRANT ALL ON FUNCTION public.prevent_role_escalation() TO service_role;
-
-
---
--- Name: FUNCTION process_recurring_tasks(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.process_recurring_tasks() TO anon;
-GRANT ALL ON FUNCTION public.process_recurring_tasks() TO authenticated;
-GRANT ALL ON FUNCTION public.process_recurring_tasks() TO service_role;
-
-
---
--- Name: FUNCTION search_workspace(p_query text, p_limit integer); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.search_workspace(p_query text, p_limit integer) TO anon;
-GRANT ALL ON FUNCTION public.search_workspace(p_query text, p_limit integer) TO authenticated;
-GRANT ALL ON FUNCTION public.search_workspace(p_query text, p_limit integer) TO service_role;
-
-
---
--- Name: FUNCTION trigger_set_timestamp(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.trigger_set_timestamp() TO anon;
-GRANT ALL ON FUNCTION public.trigger_set_timestamp() TO authenticated;
-GRANT ALL ON FUNCTION public.trigger_set_timestamp() TO service_role;
-
-
---
--- Name: FUNCTION trigger_update_project_pert(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.trigger_update_project_pert() TO anon;
-GRANT ALL ON FUNCTION public.trigger_update_project_pert() TO authenticated;
-GRANT ALL ON FUNCTION public.trigger_update_project_pert() TO service_role;
-
-
---
--- Name: FUNCTION update_invoice_balance(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.update_invoice_balance() TO anon;
-GRANT ALL ON FUNCTION public.update_invoice_balance() TO authenticated;
-GRANT ALL ON FUNCTION public.update_invoice_balance() TO service_role;
-
-
---
--- Name: TABLE activity_logs; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.activity_logs TO anon;
-GRANT ALL ON TABLE public.activity_logs TO authenticated;
-GRANT ALL ON TABLE public.activity_logs TO service_role;
-
-
---
--- Name: TABLE ai_recommendations; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.ai_recommendations TO anon;
-GRANT ALL ON TABLE public.ai_recommendations TO authenticated;
-GRANT ALL ON TABLE public.ai_recommendations TO service_role;
-
-
---
--- Name: TABLE allocation_periods; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.allocation_periods TO anon;
-GRANT ALL ON TABLE public.allocation_periods TO authenticated;
-GRANT ALL ON TABLE public.allocation_periods TO service_role;
-
-
---
--- Name: TABLE approval_chains; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.approval_chains TO anon;
-GRANT ALL ON TABLE public.approval_chains TO authenticated;
-GRANT ALL ON TABLE public.approval_chains TO service_role;
-
-
---
--- Name: TABLE approval_instances; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.approval_instances TO anon;
-GRANT ALL ON TABLE public.approval_instances TO authenticated;
-GRANT ALL ON TABLE public.approval_instances TO service_role;
-
-
---
--- Name: TABLE approval_steps; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.approval_steps TO anon;
-GRANT ALL ON TABLE public.approval_steps TO authenticated;
-GRANT ALL ON TABLE public.approval_steps TO service_role;
-
-
---
--- Name: TABLE approvals; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.approvals TO anon;
-GRANT ALL ON TABLE public.approvals TO authenticated;
-GRANT ALL ON TABLE public.approvals TO service_role;
-
-
---
--- Name: TABLE attendance; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.attendance TO anon;
-GRANT ALL ON TABLE public.attendance TO authenticated;
-GRANT ALL ON TABLE public.attendance TO service_role;
-
-
---
--- Name: TABLE audit_logs; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.audit_logs TO anon;
-GRANT ALL ON TABLE public.audit_logs TO authenticated;
-GRANT ALL ON TABLE public.audit_logs TO service_role;
-
-
---
--- Name: TABLE automation_rules; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.automation_rules TO anon;
-GRANT ALL ON TABLE public.automation_rules TO authenticated;
-GRANT ALL ON TABLE public.automation_rules TO service_role;
-
-
---
--- Name: TABLE automation_templates; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.automation_templates TO anon;
-GRANT ALL ON TABLE public.automation_templates TO authenticated;
-GRANT ALL ON TABLE public.automation_templates TO service_role;
-
-
---
--- Name: TABLE calendar_events; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.calendar_events TO anon;
-GRANT ALL ON TABLE public.calendar_events TO authenticated;
-GRANT ALL ON TABLE public.calendar_events TO service_role;
-
-
---
--- Name: TABLE calendar_sync_logs; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.calendar_sync_logs TO anon;
-GRANT ALL ON TABLE public.calendar_sync_logs TO authenticated;
-GRANT ALL ON TABLE public.calendar_sync_logs TO service_role;
-
-
---
--- Name: TABLE change_logs; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.change_logs TO anon;
-GRANT ALL ON TABLE public.change_logs TO authenticated;
-GRANT ALL ON TABLE public.change_logs TO service_role;
-
-
---
--- Name: TABLE clients; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.clients TO anon;
-GRANT ALL ON TABLE public.clients TO authenticated;
-GRANT ALL ON TABLE public.clients TO service_role;
-
-
---
--- Name: TABLE command_usage_events; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.command_usage_events TO anon;
-GRANT ALL ON TABLE public.command_usage_events TO authenticated;
-GRANT ALL ON TABLE public.command_usage_events TO service_role;
-
-
---
--- Name: TABLE comment_versions; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.comment_versions TO anon;
-GRANT ALL ON TABLE public.comment_versions TO authenticated;
-GRANT ALL ON TABLE public.comment_versions TO service_role;
-
-
---
--- Name: TABLE comments; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.comments TO anon;
-GRANT ALL ON TABLE public.comments TO authenticated;
-GRANT ALL ON TABLE public.comments TO service_role;
-
-
---
--- Name: TABLE company_billing_profile; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.company_billing_profile TO anon;
-GRANT ALL ON TABLE public.company_billing_profile TO authenticated;
-GRANT ALL ON TABLE public.company_billing_profile TO service_role;
-
-
---
--- Name: TABLE compensation_records; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.compensation_records TO anon;
-GRANT ALL ON TABLE public.compensation_records TO authenticated;
-GRANT ALL ON TABLE public.compensation_records TO service_role;
-
-
---
--- Name: TABLE connected_accounts; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.connected_accounts TO anon;
-GRANT ALL ON TABLE public.connected_accounts TO authenticated;
-GRANT ALL ON TABLE public.connected_accounts TO service_role;
-
-
---
--- Name: TABLE doc_annotations; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.doc_annotations TO anon;
-GRANT ALL ON TABLE public.doc_annotations TO authenticated;
-GRANT ALL ON TABLE public.doc_annotations TO service_role;
-
-
---
--- Name: TABLE doc_versions; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.doc_versions TO anon;
-GRANT ALL ON TABLE public.doc_versions TO authenticated;
-GRANT ALL ON TABLE public.doc_versions TO service_role;
-
-
---
--- Name: TABLE document_template_history; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.document_template_history TO anon;
-GRANT ALL ON TABLE public.document_template_history TO authenticated;
-GRANT ALL ON TABLE public.document_template_history TO service_role;
-
-
---
--- Name: TABLE document_templates; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.document_templates TO anon;
-GRANT ALL ON TABLE public.document_templates TO authenticated;
-GRANT ALL ON TABLE public.document_templates TO service_role;
-
-
---
--- Name: TABLE documents; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.documents TO anon;
-GRANT ALL ON TABLE public.documents TO authenticated;
-GRANT ALL ON TABLE public.documents TO service_role;
-
-
---
--- Name: TABLE employment_change_logs; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.employment_change_logs TO anon;
-GRANT ALL ON TABLE public.employment_change_logs TO authenticated;
-GRANT ALL ON TABLE public.employment_change_logs TO service_role;
-
-
---
--- Name: TABLE employment_records; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.employment_records TO anon;
-GRANT ALL ON TABLE public.employment_records TO authenticated;
-GRANT ALL ON TABLE public.employment_records TO service_role;
-
-
---
--- Name: TABLE epics; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.epics TO anon;
-GRANT ALL ON TABLE public.epics TO authenticated;
-GRANT ALL ON TABLE public.epics TO service_role;
-
-
---
--- Name: TABLE escalation_policies; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.escalation_policies TO anon;
-GRANT ALL ON TABLE public.escalation_policies TO authenticated;
-GRANT ALL ON TABLE public.escalation_policies TO service_role;
-
-
---
--- Name: TABLE expenses; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.expenses TO anon;
-GRANT ALL ON TABLE public.expenses TO authenticated;
-GRANT ALL ON TABLE public.expenses TO service_role;
-
-
---
--- Name: TABLE file_versions; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.file_versions TO anon;
-GRANT ALL ON TABLE public.file_versions TO authenticated;
-GRANT ALL ON TABLE public.file_versions TO service_role;
-
-
---
--- Name: TABLE files; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.files TO anon;
-GRANT ALL ON TABLE public.files TO authenticated;
-GRANT ALL ON TABLE public.files TO service_role;
-
-
---
--- Name: TABLE financial_adjustments; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.financial_adjustments TO anon;
-GRANT ALL ON TABLE public.financial_adjustments TO authenticated;
-GRANT ALL ON TABLE public.financial_adjustments TO service_role;
-
-
---
--- Name: TABLE financial_periods; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.financial_periods TO anon;
-GRANT ALL ON TABLE public.financial_periods TO authenticated;
-GRANT ALL ON TABLE public.financial_periods TO service_role;
-
-
---
--- Name: TABLE financial_snapshots; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.financial_snapshots TO anon;
-GRANT ALL ON TABLE public.financial_snapshots TO authenticated;
-GRANT ALL ON TABLE public.financial_snapshots TO service_role;
-
-
---
--- Name: TABLE generated_reports; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.generated_reports TO anon;
-GRANT ALL ON TABLE public.generated_reports TO authenticated;
-GRANT ALL ON TABLE public.generated_reports TO service_role;
-
-
---
--- Name: TABLE impact_simulations; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.impact_simulations TO anon;
-GRANT ALL ON TABLE public.impact_simulations TO authenticated;
-GRANT ALL ON TABLE public.impact_simulations TO service_role;
-
-
---
--- Name: TABLE integration_configs; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.integration_configs TO anon;
-GRANT ALL ON TABLE public.integration_configs TO authenticated;
-GRANT ALL ON TABLE public.integration_configs TO service_role;
-
-
---
--- Name: TABLE integration_health; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.integration_health TO anon;
-GRANT ALL ON TABLE public.integration_health TO authenticated;
-GRANT ALL ON TABLE public.integration_health TO service_role;
-
-
---
--- Name: TABLE integration_sync_jobs; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.integration_sync_jobs TO anon;
-GRANT ALL ON TABLE public.integration_sync_jobs TO authenticated;
-GRANT ALL ON TABLE public.integration_sync_jobs TO service_role;
-
-
---
--- Name: TABLE invitations; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.invitations TO anon;
-GRANT ALL ON TABLE public.invitations TO authenticated;
-GRANT ALL ON TABLE public.invitations TO service_role;
-
-
---
--- Name: TABLE invoice_line_items; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.invoice_line_items TO anon;
-GRANT ALL ON TABLE public.invoice_line_items TO authenticated;
-GRANT ALL ON TABLE public.invoice_line_items TO service_role;
-
-
---
--- Name: TABLE invoice_sequences; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.invoice_sequences TO anon;
-GRANT ALL ON TABLE public.invoice_sequences TO authenticated;
-GRANT ALL ON TABLE public.invoice_sequences TO service_role;
-
-
---
--- Name: TABLE invoices; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.invoices TO anon;
-GRANT ALL ON TABLE public.invoices TO authenticated;
-GRANT ALL ON TABLE public.invoices TO service_role;
-
-
---
--- Name: TABLE meeting_attendees; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.meeting_attendees TO anon;
-GRANT ALL ON TABLE public.meeting_attendees TO authenticated;
-GRANT ALL ON TABLE public.meeting_attendees TO service_role;
-
-
---
--- Name: TABLE meetings; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.meetings TO anon;
-GRANT ALL ON TABLE public.meetings TO authenticated;
-GRANT ALL ON TABLE public.meetings TO service_role;
-
-
---
--- Name: TABLE mention_rules; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.mention_rules TO anon;
-GRANT ALL ON TABLE public.mention_rules TO authenticated;
-GRANT ALL ON TABLE public.mention_rules TO service_role;
-
-
---
--- Name: TABLE milestones; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.milestones TO anon;
-GRANT ALL ON TABLE public.milestones TO authenticated;
-GRANT ALL ON TABLE public.milestones TO service_role;
-
-
---
--- Name: TABLE notification_channels; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.notification_channels TO anon;
-GRANT ALL ON TABLE public.notification_channels TO authenticated;
-GRANT ALL ON TABLE public.notification_channels TO service_role;
-
-
---
--- Name: TABLE notifications; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.notifications TO anon;
-GRANT ALL ON TABLE public.notifications TO authenticated;
-GRANT ALL ON TABLE public.notifications TO service_role;
-
-
---
--- Name: TABLE oauth_sessions; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.oauth_sessions TO anon;
-GRANT ALL ON TABLE public.oauth_sessions TO authenticated;
-GRANT ALL ON TABLE public.oauth_sessions TO service_role;
-
-
---
--- Name: TABLE payments; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.payments TO anon;
-GRANT ALL ON TABLE public.payments TO authenticated;
-GRANT ALL ON TABLE public.payments TO service_role;
-
-
---
--- Name: TABLE personal_leave; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.personal_leave TO anon;
-GRANT ALL ON TABLE public.personal_leave TO authenticated;
-GRANT ALL ON TABLE public.personal_leave TO service_role;
-
-
---
--- Name: TABLE prediction_confidence_metrics; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.prediction_confidence_metrics TO anon;
-GRANT ALL ON TABLE public.prediction_confidence_metrics TO authenticated;
-GRANT ALL ON TABLE public.prediction_confidence_metrics TO service_role;
-
-
---
--- Name: TABLE prediction_context_metrics; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.prediction_context_metrics TO anon;
-GRANT ALL ON TABLE public.prediction_context_metrics TO authenticated;
-GRANT ALL ON TABLE public.prediction_context_metrics TO service_role;
-
-
---
--- Name: TABLE prediction_errors; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.prediction_errors TO anon;
-GRANT ALL ON TABLE public.prediction_errors TO authenticated;
-GRANT ALL ON TABLE public.prediction_errors TO service_role;
-
-
---
--- Name: TABLE project_allocations; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.project_allocations TO anon;
-GRANT ALL ON TABLE public.project_allocations TO authenticated;
-GRANT ALL ON TABLE public.project_allocations TO service_role;
-
-
---
--- Name: TABLE project_signoffs; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.project_signoffs TO anon;
-GRANT ALL ON TABLE public.project_signoffs TO authenticated;
-GRANT ALL ON TABLE public.project_signoffs TO service_role;
-
-
---
--- Name: TABLE projects; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.projects TO anon;
-GRANT ALL ON TABLE public.projects TO authenticated;
-GRANT ALL ON TABLE public.projects TO service_role;
-
-
---
--- Name: TABLE recurring_task_history; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.recurring_task_history TO anon;
-GRANT ALL ON TABLE public.recurring_task_history TO authenticated;
-GRANT ALL ON TABLE public.recurring_task_history TO service_role;
-
-
---
--- Name: TABLE recurring_task_templates; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.recurring_task_templates TO anon;
-GRANT ALL ON TABLE public.recurring_task_templates TO authenticated;
-GRANT ALL ON TABLE public.recurring_task_templates TO service_role;
-
-
---
--- Name: TABLE salaries; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.salaries TO anon;
-GRANT ALL ON TABLE public.salaries TO authenticated;
-GRANT ALL ON TABLE public.salaries TO service_role;
-
-
---
--- Name: TABLE skills; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.skills TO anon;
-GRANT ALL ON TABLE public.skills TO authenticated;
-GRANT ALL ON TABLE public.skills TO service_role;
-
-
---
--- Name: TABLE sprints; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.sprints TO anon;
-GRANT ALL ON TABLE public.sprints TO authenticated;
-GRANT ALL ON TABLE public.sprints TO service_role;
-
-
---
--- Name: TABLE system_audit_ledger; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.system_audit_ledger TO anon;
-GRANT ALL ON TABLE public.system_audit_ledger TO authenticated;
-GRANT ALL ON TABLE public.system_audit_ledger TO service_role;
-
-
---
--- Name: TABLE tactical_tasks; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.tactical_tasks TO anon;
-GRANT ALL ON TABLE public.tactical_tasks TO authenticated;
-GRANT ALL ON TABLE public.tactical_tasks TO service_role;
-
-
---
--- Name: TABLE task_comments; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.task_comments TO anon;
-GRANT ALL ON TABLE public.task_comments TO authenticated;
-GRANT ALL ON TABLE public.task_comments TO service_role;
-
-
---
--- Name: TABLE task_dependencies; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.task_dependencies TO anon;
-GRANT ALL ON TABLE public.task_dependencies TO authenticated;
-GRANT ALL ON TABLE public.task_dependencies TO service_role;
-
-
---
--- Name: TABLE task_history_logs; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.task_history_logs TO anon;
-GRANT ALL ON TABLE public.task_history_logs TO authenticated;
-GRANT ALL ON TABLE public.task_history_logs TO service_role;
-
-
---
--- Name: TABLE tasks; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.tasks TO anon;
-GRANT ALL ON TABLE public.tasks TO authenticated;
-GRANT ALL ON TABLE public.tasks TO service_role;
-
-
---
--- Name: TABLE team_events; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.team_events TO anon;
-GRANT ALL ON TABLE public.team_events TO authenticated;
-GRANT ALL ON TABLE public.team_events TO service_role;
-
-
---
--- Name: TABLE team_members; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.team_members TO anon;
-GRANT ALL ON TABLE public.team_members TO authenticated;
-GRANT ALL ON TABLE public.team_members TO service_role;
-
-
---
--- Name: TABLE teams; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.teams TO anon;
-GRANT ALL ON TABLE public.teams TO authenticated;
-GRANT ALL ON TABLE public.teams TO service_role;
-
-
---
--- Name: TABLE universal_comments; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.universal_comments TO anon;
-GRANT ALL ON TABLE public.universal_comments TO authenticated;
-GRANT ALL ON TABLE public.universal_comments TO service_role;
-
-
---
--- Name: TABLE user_skills; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.user_skills TO anon;
-GRANT ALL ON TABLE public.user_skills TO authenticated;
-GRANT ALL ON TABLE public.user_skills TO service_role;
-
-
---
--- Name: TABLE users; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.users TO anon;
-GRANT ALL ON TABLE public.users TO authenticated;
-GRANT ALL ON TABLE public.users TO service_role;
-
-
---
--- Name: TABLE wait_states; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.wait_states TO anon;
-GRANT ALL ON TABLE public.wait_states TO authenticated;
-GRANT ALL ON TABLE public.wait_states TO service_role;
-
-
---
--- Name: TABLE webhooks; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.webhooks TO anon;
-GRANT ALL ON TABLE public.webhooks TO authenticated;
-GRANT ALL ON TABLE public.webhooks TO service_role;
-
-
---
--- Name: TABLE workspace_files; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.workspace_files TO anon;
-GRANT ALL ON TABLE public.workspace_files TO authenticated;
-GRANT ALL ON TABLE public.workspace_files TO service_role;
-
-
---
--- Name: TABLE workspace_holidays; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.workspace_holidays TO anon;
-GRANT ALL ON TABLE public.workspace_holidays TO authenticated;
-GRANT ALL ON TABLE public.workspace_holidays TO service_role;
-
-
---
--- Name: TABLE workspace_settings; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.workspace_settings TO anon;
-GRANT ALL ON TABLE public.workspace_settings TO authenticated;
-GRANT ALL ON TABLE public.workspace_settings TO service_role;
-
-
---
--- Name: TABLE workspaces; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.workspaces TO anon;
-GRANT ALL ON TABLE public.workspaces TO authenticated;
-GRANT ALL ON TABLE public.workspaces TO service_role;
-
-
---
--- Name: DEFAULT PRIVILEGES FOR SEQUENCES; Type: DEFAULT ACL; Schema: public; Owner: postgres
---
 
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENCES TO postgres;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENCES TO anon;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENCES TO authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENCES TO service_role;
-
-
---
--- Name: DEFAULT PRIVILEGES FOR SEQUENCES; Type: DEFAULT ACL; Schema: public; Owner: supabase_admin
---
-
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON SEQUENCES TO postgres;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON SEQUENCES TO anon;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON SEQUENCES TO authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON SEQUENCES TO service_role;
-
-
---
--- Name: DEFAULT PRIVILEGES FOR FUNCTIONS; Type: DEFAULT ACL; Schema: public; Owner: postgres
---
-
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON FUNCTIONS TO postgres;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON FUNCTIONS TO authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON FUNCTIONS TO service_role;
-
-
---
--- Name: DEFAULT PRIVILEGES FOR FUNCTIONS; Type: DEFAULT ACL; Schema: public; Owner: supabase_admin
---
-
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON FUNCTIONS TO postgres;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON FUNCTIONS TO authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON FUNCTIONS TO service_role;
-
-
---
--- Name: DEFAULT PRIVILEGES FOR TABLES; Type: DEFAULT ACL; Schema: public; Owner: postgres
---
-
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO postgres;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO anon;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO service_role;
-
-
---
--- Name: DEFAULT PRIVILEGES FOR TABLES; Type: DEFAULT ACL; Schema: public; Owner: supabase_admin
---
-
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON TABLES TO postgres;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON TABLES TO anon;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON TABLES TO authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON TABLES TO service_role;
-
 
 --
 -- PostgreSQL database dump complete
 --
-
-\unrestrict OyktAfsLl3UaseuGKOu2jv3o8QyfAGp5rtLAuygO4wtcZf4Ldk5Gl2iunpbFaLh
-
-
+

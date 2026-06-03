@@ -2,7 +2,7 @@
 // This ensures all 88 frontend files continue to work without modification,
 // while routing all data requests to our custom Express core backend.
 
-const CORE_BACKEND_URL = 'http://localhost:5003/api';
+const CORE_BACKEND_URL = '/api';
 
 class QueryBuilder {
   constructor(table) {
@@ -79,7 +79,7 @@ class QueryBuilder {
   // Promise resolution automatically triggers the fetch
   async then(resolve, reject) {
     try {
-      const token = localStorage.getItem('jwt_token');
+      const token = localStorage.getItem('local_access_token');
       const headers = {
         'Content-Type': 'application/json',
         ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -113,12 +113,19 @@ class SupabaseClientMock {
   constructor() {
     this.auth = {
       async getSession() {
-        const token = localStorage.getItem('jwt_token');
-        const userStr = localStorage.getItem('user_data');
+        const token = localStorage.getItem('local_access_token');
+        const userStr = localStorage.getItem('local_user');
         if (token && userStr) {
           return { data: { session: { access_token: token, user: JSON.parse(userStr) } }, error: null };
         }
         return { data: { session: null }, error: null };
+      },
+      async getUser() {
+        const userStr = localStorage.getItem('local_user');
+        if (userStr) {
+          return { data: { user: JSON.parse(userStr) }, error: null };
+        }
+        return { data: { user: null }, error: null };
       },
       async signInWithOAuth({ provider, options }) {
         // Mocked implementation: in a real app this redirects to your custom Express Google OAuth route
@@ -126,8 +133,9 @@ class SupabaseClientMock {
         return { data: {}, error: null };
       },
       async signOut() {
-        localStorage.removeItem('jwt_token');
-        localStorage.removeItem('user_data');
+        localStorage.removeItem('local_access_token');
+        localStorage.removeItem('local_refresh_token');
+        localStorage.removeItem('local_user');
         return { error: null };
       },
       onAuthStateChange(callback) {
