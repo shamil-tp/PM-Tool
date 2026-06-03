@@ -7,20 +7,28 @@ const CORE_BACKEND_URL = '/api';
 class QueryBuilder {
   constructor(table) {
     this.table = table;
-    this.url = new URL(`${CORE_BACKEND_URL}/${table}`);
+    this.url = new URL(`${CORE_BACKEND_URL}/${table}`, window.location.origin);
     this.method = 'GET';
     this.body = null;
     this.isSingle = false;
   }
 
   select(columns = '*') {
-    this.method = 'GET';
+    if (this.method !== 'POST' && this.method !== 'PATCH' && this.method !== 'DELETE' && this.method !== 'PUT') {
+      this.method = 'GET';
+    }
     this.url.searchParams.append('select', columns);
     return this;
   }
 
   insert(data) {
     this.method = 'POST';
+    this.body = data;
+    return this;
+  }
+
+  upsert(data) {
+    this.method = 'PUT';
     this.body = data;
     return this;
   }

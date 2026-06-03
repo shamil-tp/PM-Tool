@@ -32,7 +32,7 @@ router.post('/register', async (req, res) => {
         // Check if first user
         let countRes = await db.query('SELECT COUNT(*) FROM public.users');
         let isFirst = parseInt(countRes.rows[0].count) === 0;
-        let role = isFirst ? 'super_admin' : 'viewer';
+        let role = isFirst ? 'pending-workspace-setup' : 'uninvited';
 
         // Hash password
         const salt = await bcrypt.genSalt(10);

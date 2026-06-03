@@ -21,7 +21,58 @@ const verifyToken = (req, res, next) => {
 
 router.use(verifyToken);
 
-// Helper to parse query params (eq, neq, in, order, limit)
+function parseCondition(key, val, paramIndex, params) {
+    if (val.startsWith('eq.')) {
+        params.push(val.substring(3));
+        return { clause: `"${key}" = $${paramIndex}`, newIndex: paramIndex + 1 };
+    } else if (val.startsWith('neq.')) {
+        params.push(val.substring(4));
+        return { clause: `"${key}" != $${paramIndex}`, newIndex: paramIndex + 1 };
+    } else if (val.startsWith('gte.')) {
+        params.push(val.substring(4));
+        return { clause: `"${key}" >= $${paramIndex}`, newIndex: paramIndex + 1 };
+    } else if (val.startsWith('lte.')) {
+        params.push(val.substring(4));
+        return { clause: `"${key}" <= $${paramIndex}`, newIndex: paramIndex + 1 };
+    } else if (val.startsWith('gt.')) {
+        params.push(val.substring(3));
+        return { clause: `"${key}" > $${paramIndex}`, newIndex: paramIndex + 1 };
+    } else if (val.startsWith('lt.')) {
+        params.push(val.substring(3));
+        return { clause: `"${key}" < $${paramIndex}`, newIndex: paramIndex + 1 };
+    } else if (val.startsWith('ilike.')) {
+        params.push(val.substring(6));
+        return { clause: `"${key}" ILIKE $${paramIndex}`, newIndex: paramIndex + 1 };
+    } else if (val.startsWith('is.')) {
+        const isVal = val.substring(3).toLowerCase();
+        if (isVal === 'null') {
+            return { clause: `"${key}" IS NULL`, newIndex: paramIndex };
+        } else if (isVal === 'true' || isVal === 'false') {
+            return { clause: `"${key}" IS ${isVal.toUpperCase()}`, newIndex: paramIndex };
+        } else {
+            params.push(val.substring(3));
+            return { clause: `"${key}" IS $${paramIndex}`, newIndex: paramIndex + 1 };
+        }
+    } else if (val.startsWith('in.')) {
+        const inValues = val.substring(4, val.length - 1).split(',');
+        const placeholders = inValues.map(v => `$${paramIndex++}`).join(',');
+        params.push(...inValues);
+        return { clause: `"${key}" IN (${placeholders})`, newIndex: paramIndex };
+    } else if (val.startsWith('cs.')) {
+        try {
+            const parsedVal = JSON.parse(val.substring(3));
+            params.push(JSON.stringify(parsedVal));
+            return { clause: `"${key}" @> $${paramIndex}`, newIndex: paramIndex + 1 };
+        } catch (e) {
+            params.push(val.substring(3));
+            return { clause: `"${key}" @> $${paramIndex}`, newIndex: paramIndex + 1 };
+        }
+    } else {
+        params.push(val);
+        return { clause: `"${key}" = $${paramIndex}`, newIndex: paramIndex + 1 };
+    }
+}
+
 function parseQueryParams(query) {
     let whereClauses = [];
     let params = [];
@@ -35,32 +86,30 @@ function parseQueryParams(query) {
             orderClause = `ORDER BY "${col}" ${dir.toUpperCase() === 'DESC' ? 'DESC' : 'ASC'}`;
         } else if (key === 'limit') {
             limitClause = `LIMIT ${parseInt(query[key])}`;
-        } else if (key !== 'select') {
-            const val = query[key];
-            if (val.startsWith('eq.')) {
-                whereClauses.push(`"${key}" = $${paramIndex++}`);
-                params.push(val.substring(3));
-            } else if (val.startsWith('neq.')) {
-                whereClauses.push(`"${key}" != $${paramIndex++}`);
-                params.push(val.substring(4));
-            } else if (val.startsWith('in.')) {
-                const inValues = val.substring(4, val.length - 1).split(',');
-                const placeholders = inValues.map(v => `$${paramIndex++}`).join(',');
-                whereClauses.push(`"${key}" IN (${placeholders})`);
-                params.push(...inValues);
-            } else if (val.startsWith('cs.')) {
-                try {
-                    const parsedVal = JSON.parse(val.substring(3));
-                    whereClauses.push(`"${key}" @> $${paramIndex++}`);
-                    params.push(JSON.stringify(parsedVal));
-                } catch (e) {
-                    whereClauses.push(`"${key}" @> $${paramIndex++}`);
-                    params.push(val.substring(3));
-                }
-            } else {
-                whereClauses.push(`"${key}" = $${paramIndex++}`);
-                params.push(val);
+        } else if (key === 'or') {
+            let val = query[key];
+            if (val.startsWith('(') && val.endsWith(')')) {
+                val = val.substring(1, val.length - 1);
             }
+            const parts = val.split(',');
+            let orClauses = [];
+            for (let part of parts) {
+                const dotIdx = part.indexOf('.');
+                if (dotIdx > -1) {
+                    const orKey = part.substring(0, dotIdx);
+                    const orVal = part.substring(dotIdx + 1);
+                    const res = parseCondition(orKey, orVal, paramIndex, params);
+                    orClauses.push(res.clause);
+                    paramIndex = res.newIndex;
+                }
+            }
+            if (orClauses.length > 0) {
+                whereClauses.push(`(${orClauses.join(' OR ')})`);
+            }
+        } else if (key !== 'select') {
+            const res = parseCondition(key, query[key], paramIndex, params);
+            whereClauses.push(res.clause);
+            paramIndex = res.newIndex;
         }
     }
     return { whereClauses, params, orderClause, limitClause };
@@ -154,6 +203,42 @@ router.patch('/:table', async (req, res) => {
         }
         query += ' RETURNING *';
 
+        const result = await db.query(query, params);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.put('/:table', async (req, res) => {
+    const table = req.params.table;
+    if (!/^[a-z0-9_]+$/.test(table)) return res.status(400).json({error: "Invalid table"});
+    
+    try {
+        const body = req.body;
+        const items = Array.isArray(body) ? body : [body];
+        if (items.length === 0) return res.json([]);
+
+        const keys = Object.keys(items[0]);
+        const columns = keys.map(k => `"${k}"`).join(', ');
+        
+        let paramIndex = 1;
+        const values = [];
+        const params = [];
+        
+        for (const item of items) {
+            const itemVals = [];
+            for (const key of keys) {
+                itemVals.push(`$${paramIndex++}`);
+                params.push(item[key]);
+            }
+            values.push(`(${itemVals.join(', ')})`);
+        }
+
+        const updateExclusions = keys.filter(k => k !== 'id').map(k => `"${k}" = EXCLUDED."${k}"`).join(', ');
+        const onConflictClause = updateExclusions.length > 0 ? `ON CONFLICT (id) DO UPDATE SET ${updateExclusions}` : 'ON CONFLICT (id) DO NOTHING';
+
+        let query = `INSERT INTO public."${table}" (${columns}) VALUES ${values.join(', ')} ${onConflictClause} RETURNING *`;
         const result = await db.query(query, params);
         res.json(result.rows);
     } catch (err) {
