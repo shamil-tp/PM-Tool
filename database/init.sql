@@ -3381,6 +3381,7 @@ ALTER TABLE public.workspace_settings OWNER TO postgres;
 CREATE TABLE public.workspaces (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     name text NOT NULL,
+    slug text,
     owner_id uuid NOT NULL,
     business_type text DEFAULT 'Software'::text NOT NULL,
     template_id text,
