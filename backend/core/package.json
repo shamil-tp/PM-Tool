@@ -4,6 +4,7 @@
   "description": "Core Auth and CRUD API",
   "main": "index.js",
   "scripts": {
+    "test": "jest",
     "start": "node index.js"
   },
   "dependencies": {
@@ -14,5 +15,9 @@
     "google-auth-library": "^9.10.0",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.11.5"
+  },
+  "devDependencies": {
+    "jest": "^30.4.2",
+    "supertest": "^7.2.2"
   }
 }

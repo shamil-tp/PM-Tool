@@ -31,7 +31,11 @@ app.use('/api/calendar', calendarRoutes);
 const calendarController = require('./controller/calendarController');
 app.get('/auth/google/callback', calendarController.googleAuthCallback);
 
-app.listen(PORT,async()=>{
-    await connectDB()
-    console.log("app is running on port", PORT)
-})
+if (require.main === module) {
+    app.listen(PORT,async()=>{
+        await connectDB()
+        console.log("app is running on port", PORT)
+    })
+}
+
+module.exports = app;

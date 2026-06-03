@@ -27,7 +27,11 @@ app.get('/test',(req,res)=>{
     })
 })
 
-app.listen(PORT,async()=>{
-    await connectDB()
-    console.log("app is running")
-})
+if (require.main === module) {
+    app.listen(PORT,async()=>{
+        await connectDB()
+        console.log("app is running")
+    })
+}
+
+module.exports = app;

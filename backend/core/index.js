@@ -19,6 +19,10 @@ app.get('/', (req, res) => {
     res.status(200).json({ message: 'Welcome to the Core Backend API' });
 });
 
-app.listen(PORT, () => {
-    console.log(`Core backend is running on port ${PORT}`);
-});
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`Core backend is running on port ${PORT}`);
+    });
+}
+
+module.exports = app;
