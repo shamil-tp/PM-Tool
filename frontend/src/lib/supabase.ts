@@ -137,6 +137,11 @@ class QueryBuilder {
     return this;
   }
 
+  abortSignal(signal) {
+    this.signal = signal;
+    return this;
+  }
+
   // Promise resolution automatically triggers the fetch
   async then(resolve, reject) {
     try {
@@ -150,6 +155,7 @@ class QueryBuilder {
         method: this.method,
         headers,
         body: this.body ? JSON.stringify(this.body) : undefined,
+        signal: this.signal,
       });
 
       if (!response.ok) {
@@ -235,6 +241,10 @@ class SupabaseClientMock {
   }
 
   removeChannel(channel) {
+    return Promise.resolve();
+  }
+
+  removeAllChannels() {
     return Promise.resolve();
   }
 }
