@@ -19,7 +19,7 @@ Before you begin, ensure you have the following installed on your host machine:
 Open your terminal or command prompt and clone the repository to your local machine:
 
 ```bash
-git clone <your-repository-url>
+git clone https://github.com/shamil-tp/PM-Tool.git
 cd pm-tool
 ```
 
