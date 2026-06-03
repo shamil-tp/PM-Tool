@@ -27,92 +27,32 @@ cd pm-tool
 
 ---
 
-## ⚙️ Step 2: Configure Environment Variables
+## ⚙️ Step 2: Run the Installer
 
-The application relies on environment variables for configuration. You need to set up two separate `.env` files before building the containers.
+To automatically configure the environment variables and start the containers, we provide an interactive installer script.
 
-### 2.1 Root Environment Variables (Backend & Databases)
-
-You can quickly generate your root `.env` file directly from the command line by substituting your actual values (like your IP address and secrets) into the commands below.
-
-**For macOS / Linux (Bash):**
+**For macOS / Linux:**
 ```bash
-cat <<EOF > .env
-VITE_CALENDAR_API_URL=http://your-server-ip:5001
-GOOGLE_CLIENT_ID=your-google-client-id
-GOOGLE_CLIENT_SECRET=your-google-client-secret
-REDIRECT_URI=http://your-server-ip:5001/api/calendar/oauth2callback
-JWT_SECRET=your-secure-random-string
-POSTGRES_PASSWORD=your-secure-db-password
-DB=mongodb://mongodb:27017/pm-tool
-EOF
+chmod +x install.sh
+./install.sh
 ```
 
 **For Windows (PowerShell):**
 ```powershell
-Set-Content -Path .env -Value @"
-VITE_CALENDAR_API_URL=http://your-server-ip:5001
-GOOGLE_CLIENT_ID=your-google-client-id
-GOOGLE_CLIENT_SECRET=your-google-client-secret
-REDIRECT_URI=http://your-server-ip:5001/api/calendar/oauth2callback
-JWT_SECRET=your-secure-random-string
-POSTGRES_PASSWORD=your-secure-db-password
-DB=mongodb://mongodb:27017/pm-tool
-"@
-```
-*(Alternatively, you can manually copy `.env.example` to `.env` and edit it using your favorite text editor.)*
-
-### 2.2 Frontend Environment Variables
-
-The React frontend (built with Vite) requires its own environment variables baked in at build time.
-
-Navigate to the `frontend` directory and create the `.env` file using your terminal.
-
-**For macOS / Linux (Bash):**
-```bash
-cd frontend
-cat <<EOF > .env
-GEMINI_API_KEY="YOUR_GEMINI_API_KEY"
-VITE_PRODUCT_KEY_API_URL="http://your-server-ip:5002"
-VITE_CALENDAR_API_URL="http://your-server-ip:5001"
-EOF
-cd ..
+.\install.ps1
 ```
 
-**For Windows (PowerShell):**
-```powershell
-cd frontend
-Set-Content -Path .env -Value @"
-GEMINI_API_KEY="YOUR_GEMINI_API_KEY"
-VITE_PRODUCT_KEY_API_URL="http://your-server-ip:5002"
-VITE_CALENDAR_API_URL="http://your-server-ip:5001"
-"@
-cd ..
-```
-*(Alternatively, you can manually copy `frontend/.env.example` to `frontend/.env` and edit it.)*
-
-> **⚠️ CRITICAL WARNING:** Because the frontend is a statically built React application, **any changes to `frontend/.env` require a complete rebuild of the frontend container** for the changes to take effect.
-
----
-
-## 🐳 Step 3: Start the Containers
-
-With your environment variables configured, you are ready to start the application. 
-
-Make sure you are in the root `pm-tool` directory, then run:
-
-```bash
-docker-compose up -d --build
-```
+The script will prompt you for necessary credentials (like Google OAuth and Gemini API Key), generate secure secrets, create the required `.env` files, and automatically start the Docker containers.
 
 ### What happens now?
-1. Docker will download the necessary base images (Node, Postgres, MongoDB, Nginx).
-2. It will build the custom images for the frontend and all three backend services.
-3. The databases (Postgres & MongoDB) will start first. Health checks are configured to ensure they are fully ready before the backends attempt to connect.
-4. The backends will connect to the databases.
-5. The frontend will be served via a lightweight Nginx web server.
+1. The script writes your configuration to `.env` and `frontend/.env`.
+2. Docker will download the necessary base images (Node, Postgres, MongoDB, Nginx).
+3. It will build the custom images for the frontend and all three backend services.
+4. The databases (Postgres & MongoDB) will start first. Health checks are configured to ensure they are fully ready before the backends attempt to connect.
+5. The backends will connect to the databases.
+6. The frontend will be served via a lightweight Nginx web server.
 
-> *Note: The first time you run this command, it may take several minutes to download and build everything.*
+> *Note: The first time you run the script, it may take several minutes to download and build everything.*
 
 ---
 
