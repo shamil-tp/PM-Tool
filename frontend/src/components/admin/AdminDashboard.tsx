@@ -76,6 +76,16 @@ export function AdminDashboard({
       if (!workspace?.id) throw new Error("Could not locate active workspace.");
       if (!currentUserProfile?.id) throw new Error("No active user profile.");
 
+      const { data: existing } = await supabase
+        .from('invitations')
+        .select('*')
+        .eq('email', email)
+        .eq('workspace_id', workspace.id);
+
+      if (existing && existing.length > 0) {
+        throw new Error("This email is already invited.");
+      }
+
       const { error: insertError } = await supabase
         .from('invitations')
         .insert({
@@ -88,9 +98,6 @@ export function AdminDashboard({
         });
 
       if (insertError) {
-        if (insertError.code === '23505') {
-          throw new Error("This email is already invited.");
-        }
         throw insertError;
       }
 

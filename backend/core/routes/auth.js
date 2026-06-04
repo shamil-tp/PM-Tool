@@ -33,6 +33,19 @@ router.post('/register', async (req, res) => {
         let countRes = await db.query('SELECT COUNT(*) FROM public.users');
         let isFirst = parseInt(countRes.rows[0].count) === 0;
         let role = isFirst ? 'pending-workspace-setup' : 'uninvited';
+        let workspace_id = null;
+
+        // Check for invitations
+        let inviteRes = await db.query(
+            "SELECT * FROM public.invitations WHERE email ILIKE $1 AND status IN ('pending', 'accepted') AND expires_at >= NOW() ORDER BY created_at DESC LIMIT 1", 
+            [email]
+        );
+        let invite = inviteRes.rows[0];
+
+        if (invite) {
+            role = invite.role;
+            workspace_id = invite.workspace_id;
+        }
 
         // Hash password
         const salt = await bcrypt.genSalt(10);
@@ -40,12 +53,24 @@ router.post('/register', async (req, res) => {
 
         // Insert
         let insertRes = await db.query(
-            `INSERT INTO public.users (id, username, email, password_hash, full_name, role) 
-             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5) RETURNING *`,
-            [username, email, passwordHash, full_name, role]
+            `INSERT INTO public.users (id, username, email, password_hash, full_name, role, workspace_id) 
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6) RETURNING *`,
+            [username, email, passwordHash, full_name, role, workspace_id]
         );
 
         let user = insertRes.rows[0];
+
+        if (invite && invite.status === 'pending') {
+            await db.query("UPDATE public.invitations SET status = 'accepted' WHERE id = $1", [invite.id]);
+        }
+
+        if (invite && invite.date_of_joining) {
+            await db.query(
+                "INSERT INTO public.employment_records (profile_id, workspace_id, date_of_joining, employment_status) VALUES ($1, $2, $3, 'active') ON CONFLICT DO NOTHING", 
+                [user.id, workspace_id, invite.date_of_joining]
+            );
+        }
+
         const { accessToken, refreshToken } = generateTokens(user);
         
         await db.query('UPDATE public.users SET refresh_token = $1 WHERE id = $2', [refreshToken, user.id]);

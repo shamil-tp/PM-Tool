@@ -1,4 +1,4 @@
-﻿import { supabase } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import type { PostgrestError } from '../lib/supabase';
 
 export interface CompanyBillingProfile {
@@ -118,36 +118,50 @@ export interface FinancialAdjustment {
 }
 
 export async function fetchFinanceData(workspaceId: string) {
-  const [companyProfile, clients, invoices, payments, expenses, salaries, periods, snapshots, adjustments] = await Promise.all([
+  const [companyProfile, clients, invoices, expenses, salaries, periods, snapshots] = await Promise.all([
     supabase.from('company_billing_profile').select('*').eq('workspace_id', workspaceId).maybeSingle(),
     supabase.from('clients').select('*').eq('workspace_id', workspaceId),
     supabase.from('invoices').select('*, invoice_line_items(*)').eq('workspace_id', workspaceId),
-    supabase.from('payments').select('*, invoices!inner(workspace_id)').eq('invoices.workspace_id', workspaceId),
     supabase.from('expenses').select('*').eq('workspace_id', workspaceId),
     supabase.from('salaries').select('base_salary').eq('workspace_id', workspaceId),
     supabase.from('financial_periods').select('*').eq('workspace_id', workspaceId),
-    supabase.from('financial_snapshots').select('*').eq('workspace_id', workspaceId),
-    supabase.from('financial_adjustments').select('*, financial_periods!inner(workspace_id)').eq('financial_periods.workspace_id', workspaceId)
+    supabase.from('financial_snapshots').select('*').eq('workspace_id', workspaceId)
   ]);
 
   if (companyProfile.error && companyProfile.error.code !== 'PGRST116') throw companyProfile.error;
   if (clients.error) throw clients.error;
   if (invoices.error) throw invoices.error;
-  if (payments.error) throw payments.error;
   if (expenses.error) throw expenses.error;
   if (salaries.error) throw salaries.error;
   if (periods.error && periods.error.code !== '42P01') throw periods.error;
   if (snapshots.error && snapshots.error.code !== '42P01') throw snapshots.error;
+
+  const invoicesList = invoices.data || [];
+  const periodsList = periods.data || [];
+
+  const invoiceIds = invoicesList.map(i => i.id);
+  const periodIds = periodsList.map(p => p.id);
+
+  const [payments, adjustments] = await Promise.all([
+    invoiceIds.length > 0 
+      ? supabase.from('payments').select('*').in('invoice_id', invoiceIds)
+      : Promise.resolve({ data: [], error: null }),
+    periodIds.length > 0 
+      ? supabase.from('financial_adjustments').select('*').in('period_id', periodIds)
+      : Promise.resolve({ data: [], error: null })
+  ]);
+
+  if (payments.error) throw payments.error;
   if (adjustments.error && adjustments.error.code !== '42P01') throw adjustments.error;
 
   return {
     companyProfile: companyProfile.data as CompanyBillingProfile | null,
     clients: clients.data as Client[],
-    invoices: invoices.data as Invoice[],
+    invoices: invoicesList as Invoice[],
     payments: payments.data as Payment[],
     expenses: expenses.data as Expense[],
     salaries: salaries.data as { base_salary: number }[],
-    periods: (periods.data || []) as FinancialPeriod[],
+    periods: periodsList as FinancialPeriod[],
     snapshots: (snapshots.data || []) as FinancialSnapshot[],
     adjustments: (adjustments.data || []) as FinancialAdjustment[],
   };

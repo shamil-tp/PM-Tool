@@ -319,14 +319,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const localUser = JSON.parse(localUserStr);
             setUser(localUser);
             setProfile(localUser);
-            setProfileResolved(true);
-            setLoading(false);
-            loadingRef.current = false;
-            if (safetyTimeoutRef.current) {
-              clearTimeout(safetyTimeoutRef.current);
-              safetyTimeoutRef.current = null;
-            }
-            return;
+            // We deliberately do not return early here so that syncProfile 
+            // and validateUserWorkspace run in the background.
           } catch(e) {
             console.error("Failed to parse local user", e);
           }
