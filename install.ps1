@@ -159,6 +159,46 @@ VITE_CALENDAR_API_URL="http://${SERVER_IP}:${DEFAULT_CALENDAR_PORT}"
 
 Set-Content -Path "frontend\.env" -Value $frontendEnvContent -Encoding UTF8
 
+Write-Host "Writing backend/core/.env file..." -ForegroundColor Green
+if (!(Test-Path -Path "backend\core")) {
+    New-Item -ItemType Directory -Path "backend\core" | Out-Null
+}
+$coreEnvContent = @"
+PORT=5003
+DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@localhost:5432/pm-tool
+JWT_SECRET=${JWT_SECRET}
+GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+"@
+Set-Content -Path "backend\core\.env" -Value $coreEnvContent -Encoding UTF8
+
+Write-Host "Writing backend/calender/.env file..." -ForegroundColor Green
+if (!(Test-Path -Path "backend\calender")) {
+    New-Item -ItemType Directory -Path "backend\calender" | Out-Null
+}
+$calenderEnvContent = @"
+PORT=5000
+DB=mongodb://localhost:27017/pm-tool
+GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET_PLAIN}
+REDIRECT_URI=http://${SERVER_IP}:${DEFAULT_CALENDAR_PORT}/api/calendar/oauth2callback
+JWT_SECRET=${JWT_SECRET}
+"@
+Set-Content -Path "backend\calender\.env" -Value $calenderEnvContent -Encoding UTF8
+
+Write-Host "Writing backend/product-key/.env file..." -ForegroundColor Green
+if (!(Test-Path -Path "backend\product-key")) {
+    New-Item -ItemType Directory -Path "backend\product-key" | Out-Null
+}
+$productKeyEnvContent = @"
+PORT=5000
+DB=mongodb://localhost:27017/pm-tool
+GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET_PLAIN}
+REDIRECT_URI=http://${SERVER_IP}:${DEFAULT_CALENDAR_PORT}/api/calendar/oauth2callback
+JWT_SECRET=${JWT_SECRET}
+"@
+Set-Content -Path "backend\product-key\.env" -Value $productKeyEnvContent -Encoding UTF8
+
 Write-Host "`nEnvironment files created successfully." -ForegroundColor Green
 Write-Host "Starting Docker containers..." -ForegroundColor Green
 
@@ -175,3 +215,8 @@ Write-Host "`n==========================================" -ForegroundColor Cyan
 Write-Host "Installation complete!" -ForegroundColor Green
 Write-Host "Frontend is accessible at: http://${SERVER_IP}:3077" -ForegroundColor Green
 Write-Host "==========================================" -ForegroundColor Cyan
+
+# Open the application in the default browser
+$Url = "http://${SERVER_IP}:3077"
+Write-Host "Opening $Url in your default browser..." -ForegroundColor Yellow
+Start-Process $Url

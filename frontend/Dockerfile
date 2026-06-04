@@ -7,10 +7,6 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci || npm install
 
-ARG VITE_CALENDAR_API_URL
-
-ENV VITE_CALENDAR_API_URL=$VITE_CALENDAR_API_URL
-
 # Copy all source files and build
 COPY . .
 RUN npm run build

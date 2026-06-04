@@ -139,24 +139,26 @@ echo ""
 
 echo -e "\n${YELLOW}--- Database Configuration ---${NC}"
 if [ -n "$EXISTING_POSTGRES_PASSWORD" ]; then
-    read -s -p "Enter PostgreSQL Password (leave blank to keep existing): " POSTGRES_PASSWORD_INPUT
-    POSTGRES_PASSWORD=${POSTGRES_PASSWORD_INPUT:-$EXISTING_POSTGRES_PASSWORD}
+    echo -e "${GREEN}Found existing PostgreSQL Password. It will be reused to prevent database connection issues.${NC}"
+    POSTGRES_PASSWORD="$EXISTING_POSTGRES_PASSWORD"
 else
     read -s -p "Enter PostgreSQL Password (leave blank to auto-generate): " POSTGRES_PASSWORD_INPUT
-    
-    if command -v openssl >/dev/null 2>&1; then
-        GENERATED_PG_PASS=$(openssl rand -hex 16)
+    echo ""
+    if [ -z "$POSTGRES_PASSWORD_INPUT" ]; then
+        if command -v openssl >/dev/null 2>&1; then
+            POSTGRES_PASSWORD=$(openssl rand -hex 16)
+        else
+            POSTGRES_PASSWORD=$(LC_ALL=C tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 32)
+        fi
     else
-        GENERATED_PG_PASS=$(LC_ALL=C tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 32)
+        POSTGRES_PASSWORD="$POSTGRES_PASSWORD_INPUT"
     fi
-    POSTGRES_PASSWORD=${POSTGRES_PASSWORD_INPUT:-$GENERATED_PG_PASS}
 fi
-echo ""
 
 if [ -n "$EXISTING_JWT_SECRET" ]; then
-    JWT_SECRET=$EXISTING_JWT_SECRET
+    JWT_SECRET="$EXISTING_JWT_SECRET"
 else
-    echo -e "\n${GREEN}Generating secure secrets...${NC}"
+    echo -e "\n${GREEN}Generating secure JWT secret...${NC}"
     if command -v openssl >/dev/null 2>&1; then
         JWT_SECRET=$(openssl rand -hex 32)
     else
@@ -183,6 +185,37 @@ VITE_PRODUCT_KEY_API_URL="http://${SERVER_IP}:${DEFAULT_PRODUCT_KEY_PORT}"
 VITE_CALENDAR_API_URL="http://${SERVER_IP}:${DEFAULT_CALENDAR_PORT}"
 EOF
 
+echo -e "${GREEN}Writing backend/core/.env file...${NC}"
+mkdir -p backend/core
+cat <<EOF > backend/core/.env
+PORT=5003
+DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@localhost:5432/pm-tool
+JWT_SECRET=${JWT_SECRET}
+GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+EOF
+
+echo -e "${GREEN}Writing backend/calender/.env file...${NC}"
+mkdir -p backend/calender
+cat <<EOF > backend/calender/.env
+PORT=5000
+DB=mongodb://localhost:27017/pm-tool
+GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+REDIRECT_URI=http://${SERVER_IP}:${DEFAULT_CALENDAR_PORT}/api/calendar/oauth2callback
+JWT_SECRET=${JWT_SECRET}
+EOF
+
+echo -e "${GREEN}Writing backend/product-key/.env file...${NC}"
+mkdir -p backend/product-key
+cat <<EOF > backend/product-key/.env
+PORT=5000
+DB=mongodb://localhost:27017/pm-tool
+GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+REDIRECT_URI=http://${SERVER_IP}:${DEFAULT_CALENDAR_PORT}/api/calendar/oauth2callback
+JWT_SECRET=${JWT_SECRET}
+EOF
+
 echo -e "\n${GREEN}Environment files created successfully.${NC}"
 echo -e "${GREEN}Starting Docker containers...${NC}"
 
@@ -205,3 +238,14 @@ echo -e "\n${CYAN}==========================================${NC}"
 echo -e "${GREEN}Installation complete!${NC}"
 echo -e "${GREEN}Frontend is accessible at: http://${SERVER_IP}:3077${NC}"
 echo -e "${CYAN}==========================================${NC}"
+
+# Open the application in the default browser
+URL="http://${SERVER_IP}:3077"
+echo -e "${YELLOW}Opening $URL in your default browser...${NC}"
+if command -v xdg-open &> /dev/null; then
+    xdg-open "$URL"
+elif command -v open &> /dev/null; then
+    open "$URL"
+else
+    echo -e "${YELLOW}Could not detect a default browser opener. Please open the URL manually.${NC}"
+fi
