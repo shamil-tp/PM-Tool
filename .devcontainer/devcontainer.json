@@ -1,19 +1,11 @@
 {
   "name": "PM Tool Development Environment",
   "dockerComposeFile": "../docker-compose.yml",
-  "service": "core-backend",
-  "workspaceFolder": "/workspace",
+  "workspaceFolder": "/workspace", 
   "features": {
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
   },
-  "forwardPorts": [
-    3000,
-    5000,
-    5001,
-    5002,
-    5432,
-    27017
-  ],
+  "forwardPorts": [3000, 5000, 5001, 5002, 5432, 27017],
   "customizations": {
     "vscode": {
       "extensions": [
