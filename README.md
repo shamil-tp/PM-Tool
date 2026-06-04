@@ -37,10 +37,9 @@ chmod +x install.sh
 ./install.sh
 ```
 
-**For Windows (PowerShell):**
-```powershell
-.\install.ps1
-```
+**For Windows:**
+Simply double-click the **`install.bat`** file in the root directory! 
+*(This will automatically launch the installer and prompt for necessary administrator privileges).*
 
 The script will prompt you for necessary credentials (like Google OAuth and Gemini API Key), generate secure secrets, create the required `.env` files, and automatically start the Docker containers.
 
