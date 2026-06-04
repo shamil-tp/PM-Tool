@@ -63,6 +63,35 @@ DEFAULT_SERVER_IP="localhost"
 DEFAULT_CALENDAR_PORT="5001"
 DEFAULT_PRODUCT_KEY_PORT="5002"
 
+EXISTING_GOOGLE_CLIENT_ID=""
+EXISTING_GOOGLE_CLIENT_SECRET=""
+EXISTING_JWT_SECRET=""
+EXISTING_POSTGRES_PASSWORD=""
+EXISTING_GEMINI_API_KEY=""
+
+if [ -f .env ]; then
+    echo -e "${GREEN}Found existing .env file. Loading existing credentials...${NC}"
+    while IFS='=' read -r key value; do
+        if [[ ! "$key" =~ ^# ]] && [[ -n "$key" ]]; then
+            if [ "$key" = "GOOGLE_CLIENT_ID" ]; then EXISTING_GOOGLE_CLIENT_ID="$value"; fi
+            if [ "$key" = "GOOGLE_CLIENT_SECRET" ]; then EXISTING_GOOGLE_CLIENT_SECRET="$value"; fi
+            if [ "$key" = "JWT_SECRET" ]; then EXISTING_JWT_SECRET="$value"; fi
+            if [ "$key" = "POSTGRES_PASSWORD" ]; then EXISTING_POSTGRES_PASSWORD="$value"; fi
+        fi
+    done < .env
+fi
+
+if [ -f frontend/.env ]; then
+    while IFS='=' read -r key value; do
+        if [[ ! "$key" =~ ^# ]] && [[ -n "$key" ]]; then
+            if [ "$key" = "GEMINI_API_KEY" ]; then
+                # Remove quotes
+                EXISTING_GEMINI_API_KEY=$(echo "$value" | sed -e 's/^"//' -e 's/"$//')
+            fi
+        fi
+    done < frontend/.env
+fi
+
 # Listing Out All Present IP's
 echo -e "${CYAN}================== Present IP's ==================${NC}"
 if [ "$OS" = "Darwin" ]; then
@@ -84,22 +113,55 @@ read -p "Enter Server IP or Domain [default: $DEFAULT_SERVER_IP]: " SERVER_IP
 SERVER_IP=${SERVER_IP:-$DEFAULT_SERVER_IP}
 
 echo -e "\n${YELLOW}--- Google OAuth Credentials ---${NC}"
-read -p "Enter Google Client ID: " GOOGLE_CLIENT_ID
-read -s -p "Enter Google Client Secret (Input will be hidden): " GOOGLE_CLIENT_SECRET
+if [ -n "$EXISTING_GOOGLE_CLIENT_ID" ]; then
+    read -p "Enter Google Client ID [leave blank to keep existing]: " GOOGLE_CLIENT_ID
+    GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-$EXISTING_GOOGLE_CLIENT_ID}
+else
+    read -p "Enter Google Client ID: " GOOGLE_CLIENT_ID
+fi
+
+if [ -n "$EXISTING_GOOGLE_CLIENT_SECRET" ]; then
+    read -s -p "Enter Google Client Secret (Input will be hidden) [leave blank to keep existing]: " GOOGLE_CLIENT_SECRET
+    GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-$EXISTING_GOOGLE_CLIENT_SECRET}
+else
+    read -s -p "Enter Google Client Secret (Input will be hidden): " GOOGLE_CLIENT_SECRET
+fi
 echo ""
 
 echo -e "\n${YELLOW}--- Gemini API Configuration ---${NC}"
-read -s -p "Enter Gemini API Key (Input will be hidden): " GEMINI_API_KEY
+if [ -n "$EXISTING_GEMINI_API_KEY" ]; then
+    read -s -p "Enter Gemini API Key (Input will be hidden) [leave blank to keep existing]: " GEMINI_API_KEY
+    GEMINI_API_KEY=${GEMINI_API_KEY:-$EXISTING_GEMINI_API_KEY}
+else
+    read -s -p "Enter Gemini API Key (Input will be hidden): " GEMINI_API_KEY
+fi
 echo ""
 
-echo -e "\n${GREEN}Generating secure secrets...${NC}"
-# Generate random strings
-if command -v openssl >/dev/null 2>&1; then
-    JWT_SECRET=$(openssl rand -hex 32)
-    POSTGRES_PASSWORD=$(openssl rand -hex 16)
+echo -e "\n${YELLOW}--- Database Configuration ---${NC}"
+if [ -n "$EXISTING_POSTGRES_PASSWORD" ]; then
+    read -s -p "Enter PostgreSQL Password (leave blank to keep existing): " POSTGRES_PASSWORD_INPUT
+    POSTGRES_PASSWORD=${POSTGRES_PASSWORD_INPUT:-$EXISTING_POSTGRES_PASSWORD}
 else
-    JWT_SECRET=$(LC_ALL=C tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 64)
-    POSTGRES_PASSWORD=$(LC_ALL=C tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 32)
+    read -s -p "Enter PostgreSQL Password (leave blank to auto-generate): " POSTGRES_PASSWORD_INPUT
+    
+    if command -v openssl >/dev/null 2>&1; then
+        GENERATED_PG_PASS=$(openssl rand -hex 16)
+    else
+        GENERATED_PG_PASS=$(LC_ALL=C tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 32)
+    fi
+    POSTGRES_PASSWORD=${POSTGRES_PASSWORD_INPUT:-$GENERATED_PG_PASS}
+fi
+echo ""
+
+if [ -n "$EXISTING_JWT_SECRET" ]; then
+    JWT_SECRET=$EXISTING_JWT_SECRET
+else
+    echo -e "\n${GREEN}Generating secure secrets...${NC}"
+    if command -v openssl >/dev/null 2>&1; then
+        JWT_SECRET=$(openssl rand -hex 32)
+    else
+        JWT_SECRET=$(LC_ALL=C tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 64)
+    fi
 fi
 
 echo -e "${GREEN}Writing root .env file...${NC}"

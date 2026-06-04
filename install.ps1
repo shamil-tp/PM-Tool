@@ -54,6 +54,28 @@ $DEFAULT_SERVER_IP = "localhost"
 $DEFAULT_CALENDAR_PORT = "5001"
 $DEFAULT_PRODUCT_KEY_PORT = "5002"
 
+$EXISTING_GOOGLE_CLIENT_ID = ""
+$EXISTING_GOOGLE_CLIENT_SECRET = ""
+$EXISTING_JWT_SECRET = ""
+$EXISTING_POSTGRES_PASSWORD = ""
+$EXISTING_GEMINI_API_KEY = ""
+
+if (Test-Path ".env") {
+    Write-Host "Found existing .env file. Loading existing credentials..." -ForegroundColor Green
+    Get-Content ".env" | ForEach-Object {
+        if ($_ -match "^GOOGLE_CLIENT_ID=(.*)") { $EXISTING_GOOGLE_CLIENT_ID = $matches[1] }
+        if ($_ -match "^GOOGLE_CLIENT_SECRET=(.*)") { $EXISTING_GOOGLE_CLIENT_SECRET = $matches[1] }
+        if ($_ -match "^JWT_SECRET=(.*)") { $EXISTING_JWT_SECRET = $matches[1] }
+        if ($_ -match "^POSTGRES_PASSWORD=(.*)") { $EXISTING_POSTGRES_PASSWORD = $matches[1] }
+    }
+}
+
+if (Test-Path "frontend\.env") {
+    Get-Content "frontend\.env" | ForEach-Object {
+        if ($_ -match "^GEMINI_API_KEY=`"?(.*?)`"?$") { $EXISTING_GEMINI_API_KEY = $matches[1] }
+    }
+}
+
 #Listing Out All Present IP's
 Write-Host "================== Present IP's ==================" -ForegroundColor Cyan
 gip | Where-Object Status -ne "Disconnected" | Select-Object @{N="Interface Alias";E={$_.InterfaceAlias}}, @{N="IP";E={$_.IPv4Address.IPAddress}} | Format-Table -AutoSize
@@ -66,18 +88,48 @@ if ([string]::IsNullOrWhiteSpace($SERVER_IP)) {
 }
 
 Write-Host "`n--- Google OAuth Credentials ---" -ForegroundColor Yellow
-$GOOGLE_CLIENT_ID = Read-Host "Enter Google Client ID"
-$GOOGLE_CLIENT_SECRET = Read-Host "Enter Google Client Secret (Input will be hidden)" -AsSecureString
+$clientIdPrompt = if ($EXISTING_GOOGLE_CLIENT_ID) { "Enter Google Client ID [leave blank to keep existing]" } else { "Enter Google Client ID" }
+$GOOGLE_CLIENT_ID = Read-Host $clientIdPrompt
+if ([string]::IsNullOrWhiteSpace($GOOGLE_CLIENT_ID) -and $EXISTING_GOOGLE_CLIENT_ID) {
+    $GOOGLE_CLIENT_ID = $EXISTING_GOOGLE_CLIENT_ID
+}
+
+$clientSecretPrompt = if ($EXISTING_GOOGLE_CLIENT_SECRET) { "Enter Google Client Secret (Input will be hidden) [leave blank to keep existing]" } else { "Enter Google Client Secret (Input will be hidden)" }
+$GOOGLE_CLIENT_SECRET = Read-Host $clientSecretPrompt -AsSecureString
 $GOOGLE_CLIENT_SECRET_PLAIN = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($GOOGLE_CLIENT_SECRET))
+if ([string]::IsNullOrWhiteSpace($GOOGLE_CLIENT_SECRET_PLAIN) -and $EXISTING_GOOGLE_CLIENT_SECRET) {
+    $GOOGLE_CLIENT_SECRET_PLAIN = $EXISTING_GOOGLE_CLIENT_SECRET
+}
 
 Write-Host "`n--- Gemini API Configuration ---" -ForegroundColor Yellow
-$GEMINI_API_KEY = Read-Host "Enter Gemini API Key (Input will be hidden)" -AsSecureString
+$geminiPrompt = if ($EXISTING_GEMINI_API_KEY) { "Enter Gemini API Key (Input will be hidden) [leave blank to keep existing]" } else { "Enter Gemini API Key (Input will be hidden)" }
+$GEMINI_API_KEY = Read-Host $geminiPrompt -AsSecureString
 $GEMINI_API_KEY_PLAIN = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($GEMINI_API_KEY))
+if ([string]::IsNullOrWhiteSpace($GEMINI_API_KEY_PLAIN) -and $EXISTING_GEMINI_API_KEY) {
+    $GEMINI_API_KEY_PLAIN = $EXISTING_GEMINI_API_KEY
+}
 
-Write-Host "`nGenerating secure secrets..." -ForegroundColor Green
-# Generate random strings
-$JWT_SECRET = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 64 | % {[char]$_})
-$POSTGRES_PASSWORD = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 32 | % {[char]$_})
+Write-Host "`n--- Database Configuration ---" -ForegroundColor Yellow
+$postgresPrompt = if ($EXISTING_POSTGRES_PASSWORD) { "Enter PostgreSQL Password (leave blank to keep existing)" } else { "Enter PostgreSQL Password (leave blank to auto-generate)" }
+$POSTGRES_PASSWORD_INPUT = Read-Host $postgresPrompt -AsSecureString
+$POSTGRES_PASSWORD_PLAIN = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($POSTGRES_PASSWORD_INPUT))
+
+if ($EXISTING_JWT_SECRET) {
+    $JWT_SECRET = $EXISTING_JWT_SECRET
+} else {
+    Write-Host "`nGenerating secure secrets..." -ForegroundColor Green
+    $JWT_SECRET = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 64 | % {[char]$_})
+}
+
+if ([string]::IsNullOrWhiteSpace($POSTGRES_PASSWORD_PLAIN)) {
+    if ($EXISTING_POSTGRES_PASSWORD) {
+        $POSTGRES_PASSWORD = $EXISTING_POSTGRES_PASSWORD
+    } else {
+        $POSTGRES_PASSWORD = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 32 | % {[char]$_})
+    }
+} else {
+    $POSTGRES_PASSWORD = $POSTGRES_PASSWORD_PLAIN
+}
 
 Write-Host "Writing root .env file..." -ForegroundColor Green
 
