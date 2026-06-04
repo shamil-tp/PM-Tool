@@ -9,9 +9,14 @@ Write-Host ""
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
 if (!$isAdmin) {
-    Write-Host "Error: This script must be run as an Administrator to install software via winget." -ForegroundColor Red
-    Write-Host "Please restart PowerShell as Administrator and try again." -ForegroundColor Yellow
-    Exit
+    try {
+        Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+        Exit
+    } catch {
+        Write-Host "Error: This script must be run as an Administrator to install software via winget." -ForegroundColor Red
+        Write-Host "Please restart PowerShell as Administrator or accept the UAC prompt." -ForegroundColor Yellow
+        Exit
+    }
 }
 
 # 1. Check and Install Docker Desktop
