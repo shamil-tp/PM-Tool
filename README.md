@@ -41,6 +41,11 @@ chmod +x install.sh
 Simply double-click the **`install.bat`** file in the root directory! 
 *(This will automatically launch the installer and prompt for necessary administrator privileges).*
 
+> **Note on Windows Security:**
+> - If you receive a blue **"Windows protected your PC"** warning (SmartScreen), click **More info** -> **Run anyway**.
+> - If you prefer running it manually from a PowerShell terminal, you must bypass the default execution policy by running:
+>   `powershell -ExecutionPolicy Bypass -File install.ps1`
+
 The script will prompt you for necessary credentials (like Google OAuth and Gemini API Key), generate secure secrets, create the required `.env` files, and automatically start the Docker containers.
 
 ### What happens now?
