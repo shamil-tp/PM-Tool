@@ -1,17 +1,42 @@
+version: '3.8'
 
 services:
   frontend:
+    container_name: frontend
     build:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "3077:80"
+      - "3000:80"
     depends_on:
+      - core-backend
       - calendar-backend
       - product-key-backend
     restart: unless-stopped
+    networks:
+      - pm-tool-network
+
+  core-backend:
+    container_name: core-backend
+    build:
+      context: ./backend/core
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5003"
+    volumes:
+      # Mount the entire root folder for the DevContainer workspace context
+      - .:/workspace
+    env_file:
+      - .env
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - pm-tool-network
 
   calendar-backend:
+    container_name: calendar-backend
     build:
       context: ./backend/calender
       dockerfile: Dockerfile
@@ -23,8 +48,11 @@ services:
       mongodb:
         condition: service_healthy
     restart: unless-stopped
+    networks:
+      - pm-tool-network
 
   product-key-backend:
+    container_name: product-key-backend
     build:
       context: ./backend/product-key
       dockerfile: Dockerfile
@@ -36,21 +64,11 @@ services:
       mongodb:
         condition: service_healthy
     restart: unless-stopped
-
-  core-backend:
-    build:
-      context: ./backend/core
-      dockerfile: Dockerfile
-    ports:
-      - "5003:5003"
-    env_file:
-      - .env
-    depends_on:
-      postgresql:
-        condition: service_healthy
-    restart: unless-stopped
+    networks:
+      - pm-tool-network
 
   mongodb:
+    container_name: mongodb
     image: mongo:4.4
     command: ["mongod", "--quiet"]
     ports:
@@ -59,31 +77,40 @@ services:
       - mongodb_data:/data/db
     healthcheck:
       test: ["CMD", "mongo", "--quiet", "--eval", "db.adminCommand('ping')"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 10s
+      retries: 5
+      start_period: 15s
     restart: unless-stopped
+    networks:
+      - pm-tool-network
 
   postgresql:
+    container_name: postgresql
     image: postgres:15
     ports:
       - "5432:5432"
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-default_password}
       POSTGRES_DB: pm-tool
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d pm-tool"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 30s
+      retries: 5
+      start_period: 15s
     restart: unless-stopped
+    networks:
+      - pm-tool-network
 
 volumes:
   mongodb_data:
   postgres_data:
+
+networks:
+  pm-tool-network:
+    driver: bridge

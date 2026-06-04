@@ -1,0 +1,28 @@
+{
+  "name": "PM Tool Development Environment",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "core-backend",
+  "workspaceFolder": "/workspace",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+  },
+  "forwardPorts": [
+    3000,
+    5000,
+    5001,
+    5002,
+    5432,
+    27017
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-azuretools.vscode-docker",
+        "mongodb.mongodb-vscode",
+        "ms-ossdata.vscode-postgresql",
+        "dbaeumer.vscode-eslint"
+      ]
+    }
+  },
+  "postCreateCommand": "docker compose up -d"
+}
