@@ -304,7 +304,8 @@ export function CalendarView() {
               className="px-4 py-2 bg-primary hover:bg-primary/90 text-on-primary rounded text-sm font-medium flex items-center gap-2 transition-colors"
             >
               <Plus className="w-4 h-4" />
-              New Event
+              <span className="hidden sm:inline">New Event</span>
+              <span className="sm:hidden">Add</span>
             </button>
           )}
         </div>
@@ -324,9 +325,9 @@ export function CalendarView() {
           </div>
         ) : viewMode === 'month' ? (
           /* Month Grid View */
-          <div className="flex-1 flex flex-col p-6 min-h-0">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
+          <div className="flex-1 flex flex-col p-2 sm:p-6 min-h-0">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4 gap-4">
+              <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
                 <h2 className="text-xl font-semibold text-on-surface">
                   {currentDate.toLocaleString('default', { month: 'long' })} {year}
                 </h2>
@@ -352,7 +353,7 @@ export function CalendarView() {
                 </div>
               </div>
               
-              <div className="flex items-center gap-4 text-xs font-medium text-on-surface-variant">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-[10px] sm:text-xs font-medium text-on-surface-variant">
                 <div className="flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded bg-amber-500/20 border border-amber-500/30" />
                   Private Meetings
@@ -375,9 +376,10 @@ export function CalendarView() {
             <div className="flex-1 flex flex-col border border-outline-variant rounded-xl overflow-hidden bg-surface-container-lowest shadow-inner">
               {/* Days of week header */}
               <div className="grid grid-cols-7 border-b border-outline-variant bg-surface-container-low text-center">
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                  <div key={day} className="py-3 text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
-                    {day}
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, i) => (
+                  <div key={day} className="py-2 sm:py-3 text-[10px] sm:text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
+                    <span className="hidden sm:inline">{day}</span>
+                    <span className="sm:hidden">{day.charAt(0)}</span>
                   </div>
                 ))}
               </div>
@@ -391,7 +393,7 @@ export function CalendarView() {
                   return (
                     <div
                       key={index}
-                      className={`min-h-[60px] p-2 border-r border-b border-outline-variant/40 flex flex-col group relative transition-colors ${
+                      className={`min-h-[60px] sm:min-h-[80px] p-1 sm:p-2 border-r border-b border-outline-variant/40 flex flex-col group relative transition-colors ${
                         d.isCurrentMonth ? 'bg-surface-container-lowest' : 'bg-surface-container-low/10 text-on-surface-variant/40'
                       } hover:bg-surface-container-high/20`}
                     >
@@ -420,15 +422,16 @@ export function CalendarView() {
                         )}
                       </div>
                       
-                      <div className="flex-1 overflow-y-auto space-y-1 pr-0.5 scrollbar-thin max-h-[48px]">
+                      <div className="flex-1 overflow-y-auto pr-0.5 scrollbar-thin flex flex-row flex-wrap sm:flex-col content-start gap-1 sm:gap-1 max-h-[48px] sm:max-h-full">
                         {cellEvents.map(event => (
                           <button
                             key={event.id}
                             onClick={() => handleOpenModal(event)}
-                            className={`w-full text-left text-[10px] px-2 py-1 rounded border transition-all truncate block font-medium ${getEventBadgeStyle(event)}`}
+                            className={`sm:w-full text-left text-[10px] sm:px-2 sm:py-1 rounded-full sm:rounded border border-transparent sm:border-current/10 transition-all truncate flex items-center justify-center sm:justify-start font-medium ${getEventBadgeStyle(event)}`}
                             title={event.summary}
                           >
-                            {event.summary || '(No Title)'}
+                            <span className="hidden sm:inline truncate">{event.summary || '(No Title)'}</span>
+                            <span className="sm:hidden w-1.5 h-1.5 rounded-full inline-block bg-current" />
                           </button>
                         ))}
                       </div>
@@ -536,7 +539,7 @@ export function CalendarView() {
                 />
               </div>
               
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs uppercase font-mono text-on-surface-variant mb-1">Start Time</label>
                   <input 

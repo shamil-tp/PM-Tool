@@ -3267,7 +3267,7 @@ CREATE TABLE public.users (
     availability_factor numeric DEFAULT 1 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     preferences jsonb DEFAULT '{"notifications": {"comments": true, "mentions": true, "status_changes": true, "system_updates": true, "project_updates": true, "task_assignments": true}}'::jsonb,
-    CONSTRAINT users_role_check CHECK ((role = ANY (ARRAY['super_admin'::text, 'pm'::text, 'developer'::text, 'viewer'::text, 'pending-workspace-setup'::text])))
+    CONSTRAINT users_role_check CHECK ((role = ANY (ARRAY['super_admin'::text, 'pm'::text, 'developer'::text, 'viewer'::text, 'pending-workspace-setup'::text, 'uninvited'::text])))
 );
 
 

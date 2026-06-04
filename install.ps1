@@ -5,10 +5,59 @@ Write-Host "    PM-Tool Automated Installer           " -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host ""
 
+# Ensure the script is running with administrative privileges
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+if (!$isAdmin) {
+    Write-Host "Error: This script must be run as an Administrator to install software via winget." -ForegroundColor Red
+    Write-Host "Please restart PowerShell as Administrator and try again." -ForegroundColor Yellow
+    Exit
+}
+
+# 1. Check and Install Docker Desktop
+if (!(Get-Command docker -ErrorAction SilentlyContinue)) {
+    Write-Host "Docker not found. Attempting to install via winget..." -ForegroundColor Yellow
+    
+    # Installing Docker Desktop (Standard winget ID)
+    winget install --id Docker.DockerDesktop --silent --accept-source-agreements --accept-package-agreements
+    
+    # Verify installation success
+    if (Get-Command docker -ErrorAction SilentlyContinue) {
+        Write-Host "Docker installed successfully!" -ForegroundColor Green
+    } else {
+        Write-Host "Warning: Winget finished, but 'docker' command is still not in PATH. You may need to restart your terminal or computer." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "Docker is already installed." -ForegroundColor Green
+}
+
+# 2. Check and Install Docker Compose
+# Note: Modern Docker Desktop includes docker-compose natively as 'docker compose' (without the hyphen).
+# This checks for both the legacy standalone executable and the plugin syntax.
+if (!(Get-Command docker-compose -ErrorAction SilentlyContinue) -and !(docker compose version -ErrorAction SilentlyContinue)) {
+    Write-Host "Docker Compose not found. Attempting to install via winget..." -ForegroundColor Yellow
+    
+    # Installing Docker Compose standalone CLI
+    winget install --id Docker.DockerCompose --silent --accept-source-agreements --accept-package-agreements
+    
+    if (Get-Command docker-compose -ErrorAction SilentlyContinue) {
+        Write-Host "Docker Compose installed successfully!" -ForegroundColor Green
+    } else {
+        Write-Host "Warning: Winget finished, but 'docker-compose' command is still not recognized." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "Docker Compose is already available." -ForegroundColor Green
+}
+
 # Default values
 $DEFAULT_SERVER_IP = "localhost"
 $DEFAULT_CALENDAR_PORT = "5001"
 $DEFAULT_PRODUCT_KEY_PORT = "5002"
+
+#Listing Out All Present IP's
+Write-Host "================== Present IP's ==================" -ForegroundColor Cyan
+gip | Where-Object Status -ne "Disconnected" | Select-Object @{N="Interface Alias";E={$_.InterfaceAlias}}, @{N="IP";E={$_.IPv4Address.IPAddress}} | Format-Table -AutoSize
+Write-Host "==================================================" -ForegroundColor Cyan
 
 # Prompt for inputs
 $SERVER_IP = Read-Host "Enter Server IP or Domain [default: $DEFAULT_SERVER_IP]"
