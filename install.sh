@@ -40,6 +40,42 @@ else
     echo -e "${GREEN}Docker is already installed.${NC}"
 fi
 
+# 1.1 Verify Docker daemon is running
+echo -e "${YELLOW}Checking if Docker daemon is running...${NC}"
+if ! docker info &> /dev/null && ! sudo docker info &> /dev/null; then
+    echo -e "${RED}Docker daemon is not running.${NC}"
+    if [ "$OS" = "Darwin" ]; then
+        echo -e "${YELLOW}Attempting to start Docker Desktop...${NC}"
+        open -a Docker
+        echo -e "${YELLOW}Waiting for Docker to start (this may take up to a minute)...${NC}"
+        attempts=0
+        while [ $attempts -lt 30 ]; do
+            sleep 3
+            echo -n -e "${YELLOW}.${NC}"
+            if docker info &> /dev/null; then
+                break
+            fi
+            attempts=$((attempts+1))
+        done
+        echo ""
+        if ! docker info &> /dev/null; then
+            echo -e "${RED}Timed out waiting for Docker. Please start Docker Desktop manually and try again.${NC}"
+            exit 1
+        fi
+        echo -e "${GREEN}Docker daemon is now running!${NC}"
+    elif [ "$OS" = "Linux" ]; then
+        echo -e "${YELLOW}Attempting to start Docker service...${NC}"
+        sudo systemctl start docker
+        if ! sudo docker info &> /dev/null; then
+             echo -e "${RED}Failed to start Docker. Please start it manually and run the script again.${NC}"
+             exit 1
+        fi
+        echo -e "${GREEN}Docker daemon is now running!${NC}"
+    fi
+else
+    echo -e "${GREEN}Docker daemon is running.${NC}"
+fi
+
 # 2. Check and Install Docker Compose
 if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
     echo -e "${YELLOW}Docker Compose not found. Attempting to install...${NC}"

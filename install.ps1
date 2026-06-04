@@ -31,6 +31,38 @@ if (!(Get-Command docker -ErrorAction SilentlyContinue)) {
     Write-Host "Docker is already installed." -ForegroundColor Green
 }
 
+# 1.1 Verify Docker daemon is running
+Write-Host "Checking if Docker daemon is running..." -ForegroundColor Yellow
+$null = docker info 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Docker daemon is not running." -ForegroundColor Red
+    Write-Host "Attempting to start Docker Desktop..." -ForegroundColor Yellow
+    Start-Process "C:\Program Files\Docker\Docker\Docker Desktop.exe" -ErrorAction SilentlyContinue
+    Write-Host "Waiting for Docker daemon to start (this may take up to a minute)..." -ForegroundColor Yellow
+    
+    $attempts = 0
+    $maxAttempts = 30
+    $daemonRunning = $false
+    while ($attempts -lt $maxAttempts) {
+        Start-Sleep -Seconds 3
+        Write-Host -NoNewline "." -ForegroundColor Yellow
+        $null = docker info 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            $daemonRunning = $true
+            break
+        }
+        $attempts++
+    }
+    Write-Host ""
+    if (!$daemonRunning) {
+        Write-Host "Timed out waiting for Docker daemon to start. Please start Docker Desktop manually and try again." -ForegroundColor Red
+        Exit
+    }
+    Write-Host "Docker daemon is now running!" -ForegroundColor Green
+} else {
+    Write-Host "Docker daemon is running." -ForegroundColor Green
+}
+
 # 2. Check and Install Docker Compose
 # Note: Modern Docker Desktop includes docker-compose natively as 'docker compose' (without the hyphen).
 # This checks for both the legacy standalone executable and the plugin syntax.
